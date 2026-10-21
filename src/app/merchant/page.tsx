@@ -342,7 +342,15 @@ function WebhooksPanel({
     };
   }, [apiConfigured, merchant]);
 
-  if (!apiConfigured) return null;
+  if (!apiConfigured) {
+  return (
+    <Panel title={tr("Webhook settings")} subtitle={tr("Endpoints the backend POSTs charge events to.")}>
+      <Notice tone="info">
+        {tr("Webhook management requires the payflow backend. Set NEXT_PUBLIC_API_URL to enable.")}
+      </Notice>
+    </Panel>
+  );
+}
 
   const urlCheck = checkWebhookUrl(url);
   const usable = urlCheck.ok && events.length > 0;
