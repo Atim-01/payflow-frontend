@@ -8,7 +8,7 @@ import { WebhookDeliveryHistory } from "@/components/WebhookDeliveryHistory";
 import { buildCsv, downloadCsv, exportFilename, type ChargeRow } from "@/lib/csv";
 import { fillBuckets, parseRevenue, type BucketSize, type RevenuePoint } from "@/lib/revenue";
 import { parseMerchantChurn, type MerchantChurnMonth } from "@/lib/churn";
-import { chainMandatesFor, chainMerchantSummary, chainPlanSubscriberCount, chainPlansOf, endable, mandateFunding } from "@/lib/chain";
+import { chainMandatesFor, chainMerchantSummary, chainPlanSubscriberCount, chainPlansOf, chainUnpaidMandates, endable, mandateFunding, type UnpaidMandate } from "@/lib/chain";
 import { config, type ConfiguredToken } from "@/lib/config";
 import { VirtualList } from "@/components/VirtualList";
 
@@ -734,6 +734,8 @@ export default function MerchantPage() {
   const { address, networkMismatch, signXdr, connect, connecting } = useWallet();
   const [plans, setPlans] = useState<ApiPlan[] | null>(null);
   const [mandates, setMandates] = useState<ApiMandate[] | null>(null);
+  const [unpaidMandates, setUnpaidMandates] = useState<import("@/lib/chain").UnpaidMandate[] | null>(null);
+  const [subscribersTab, setSubscribersTab] = useState<"all" | "unpaid">("all");
   const [summary, setSummary] = useState<MerchantSummary | null>(null);
   /**
    * Per-plan performance stats keyed by plan id.
@@ -898,6 +900,43 @@ export default function MerchantPage() {
       }
     }
     setMandates(rows);
+
+    // Load unpaid mandates
+    const unpaidResponse = await api.unpaidMandates(address);
+    if (unpaidResponse && unpaidResponse.unpaid) {
+      // Backend provided unpaid list, convert to UnpaidMandate format
+      const now = Math.floor(Date.now() / 1000);
+      const unpaidList: UnpaidMandate[] = await Promise.all(
+        unpaidResponse.unpaid.map(async (mandate) => {
+          try {
+            const amount = BigInt(mandate.amount);
+            const balance = await payflow.vaultBalance(address, mandate.subscriber, mandate.token ?? config.contracts.token);
+            const shortfall = balance !== null && amount > balance ? amount - balance : 0n;
+            return {
+              mandate,
+              shortfall,
+              overdueDuration: now - mandate.next_charge,
+            };
+          } catch {
+            // If vault balance read fails, estimate from mandate being in unpaid list
+            return {
+              mandate,
+              shortfall: BigInt(mandate.amount),
+              overdueDuration: now - mandate.next_charge,
+            };
+          }
+        })
+      );
+      setUnpaidMandates(unpaidList.filter(u => u.shortfall > 0n));
+    } else {
+      // Fallback to contract-only mode
+      try {
+        const unpaidList = await chainUnpaidMandates(address, address);
+        setUnpaidMandates(unpaidList);
+      } catch {
+        setUnpaidMandates([]);
+      }
+    }
 
     // Revenue totals come from charge history, which only the indexer has.
     setSummary(s ?? chainMerchantSummary(address, rows));
@@ -1745,19 +1784,72 @@ export default function MerchantPage() {
 
       <Panel
         title="Subscribers"
-        subtitle="Charging is permissionless — you can settle a due mandate yourself instead of waiting for the keeper."
+        subtitle={
+          subscribersTab === "all"
+            ? "Charging is permissionless — you can settle a due mandate yourself instead of waiting for the keeper."
+            : "Active mandates where the subscriber's vault cannot cover the next charge."
+        }
         actions={
-          <button
-            type="button"
-            className="btn-ghost mono text-sm"
-            disabled={exporting || mandates?.length === 0 || networkMismatch}
-            onClick={() => void exportCsv()}
-            aria-label="Export charges to CSV"
-          >
-            {exporting ? "Exporting…" : "Export CSV"}
-          </button>
+          <div className="flex items-center gap-3">
+            {/* Tab navigation */}
+            <div className="flex rounded-lg border border-edge bg-surface/30" role="tablist" aria-label="Subscriber views">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={subscribersTab === "all"}
+                aria-controls="subscribers-all-panel"
+                id="subscribers-all-tab"
+                className={`px-3 py-1.5 text-sm font-medium transition-colors rounded-l-lg ${
+                  subscribersTab === "all"
+                    ? "bg-accent text-white"
+                    : "text-muted hover:text-fg"
+                }`}
+                onClick={() => setSubscribersTab("all")}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={subscribersTab === "unpaid"}
+                aria-controls="subscribers-unpaid-panel"
+                id="subscribers-unpaid-tab"
+                className={`px-3 py-1.5 text-sm font-medium transition-colors rounded-r-lg ${
+                  subscribersTab === "unpaid"
+                    ? "bg-accent text-white"
+                    : "text-muted hover:text-fg"
+                }`}
+                onClick={() => setSubscribersTab("unpaid")}
+              >
+                Unpaid
+                {unpaidMandates && unpaidMandates.length > 0 && (
+                  <span className="ml-1.5 rounded-full bg-danger px-1.5 py-0.5 text-xs font-semibold text-white">
+                    {unpaidMandates.length}
+                  </span>
+                )}
+              </button>
+            </div>
+            {subscribersTab === "all" && (
+              <button
+                type="button"
+                className="btn-ghost mono text-sm"
+                disabled={exporting || mandates?.length === 0 || networkMismatch}
+                onClick={() => void exportCsv()}
+                aria-label="Export charges to CSV"
+              >
+                {exporting ? "Exporting…" : "Export CSV"}
+              </button>
+            )}
+          </div>
         }
       >
+        {/* All Subscribers Tab */}
+        <div
+          role="tabpanel"
+          id="subscribers-all-panel"
+          aria-labelledby="subscribers-all-tab"
+          hidden={subscribersTab !== "all"}
+        >
         {mandates === null ? (
           <SkeletonRows rows={3} label="Loading subscribers" />
         ) : mandates.length === 0 ? (
@@ -2047,6 +2139,85 @@ export default function MerchantPage() {
             }}
           />
         )}
+        </div>
+
+        {/* Unpaid Subscribers Tab */}
+        <div
+          role="tabpanel"
+          id="subscribers-unpaid-panel"
+          aria-labelledby="subscribers-unpaid-tab"
+          hidden={subscribersTab !== "unpaid"}
+        >
+          {unpaidMandates === null ? (
+            <SkeletonRows rows={2} label="Loading unpaid subscribers" />
+          ) : unpaidMandates.length === 0 ? (
+            <Empty title="All subscribers are funded">
+              Every active mandate due for charging has sufficient vault balance.
+              Subscribers with insufficient funds will appear here.
+            </Empty>
+          ) : (
+            <div className="space-y-3">
+              {unpaidMandates.map((unpaid) => {
+                const m = unpaid.mandate;
+                const meta = metaFor(metas, m.token ?? config.contracts.token);
+                const badge = discountBadge(m);
+                const overdueHours = Math.floor(unpaid.overdueDuration / 3600);
+                const overdueDays = Math.floor(unpaid.overdueDuration / 86400);
+                const overdueText =
+                  overdueDays > 0
+                    ? `${overdueDays} day${overdueDays === 1 ? "" : "s"}`
+                    : overdueHours > 0
+                      ? `${overdueHours} hour${overdueHours === 1 ? "" : "s"}`
+                      : "less than 1 hour";
+                return (
+                  <div
+                    key={m.id}
+                    className="rounded-lg border border-danger/40 bg-danger/5 p-4"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Link
+                            href={`/mandates/?id=${m.id}`}
+                            className="font-medium hover:underline text-soft focus:outline-none focus:ring-1 focus:ring-accent rounded"
+                          >
+                            #{m.id}
+                          </Link>
+                          <AddressLink value={m.subscriber} />
+                          <Badge status={m.status} />
+                          {badge && (
+                            <span className="rounded-full bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent">
+                              {badge}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1 text-sm text-muted">
+                          {fromStroops(m.amount, 4, meta.decimals)} {meta.symbol}{" "}
+                          {formatPeriod(m.period)} · {m.charges_made} settled
+                        </div>
+                        <div className="mt-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2">
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                            <div className="text-sm">
+                              <span className="font-medium text-danger">
+                                Short by {fromStroops(unpaid.shortfall, 4, meta.decimals)} {meta.symbol}
+                              </span>
+                            </div>
+                            <div className="text-xs text-muted">
+                              Overdue for {overdueText}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <CopyButton value={m.subscriber} label="subscriber address" />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </Panel>
 
       <WebhooksPanel key={`webhooks:${address}`} merchant={address} apiConfigured={api.isConfigured()} />
