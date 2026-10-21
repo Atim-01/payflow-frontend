@@ -72,6 +72,7 @@ vi.mock("@/lib/payflow", () => ({
   readContract: payflowMock.readContract,
   server: payflowMock.server,
   ...payflowHelpers,
+  mandateSupportsSpendLimit: vi.fn(() => false),
   // `lib/chain` imports these at module scope; the partial chain mock below
   // loads the real module for its pure vault helpers.
   MAX_PAGE: 50,

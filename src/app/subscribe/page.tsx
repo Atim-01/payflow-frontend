@@ -186,7 +186,11 @@ function SubscribeInner() {
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const request = useRef(0);
   const walletState = useRef({ address, networkMismatch });
-  walletState.current = { address, networkMismatch };
+  // Mirrored in an effect: the wallet-changed guard is read from the signing
+  // flow (event handler / async callback), never during render.
+  useEffect(() => {
+    walletState.current = { address, networkMismatch };
+  }, [address, networkMismatch]);
 
   // Sync state if searchParams change externally
   useEffect(() => {

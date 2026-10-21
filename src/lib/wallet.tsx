@@ -113,9 +113,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [walletNetwork, setWalletNetwork] = useState<string | null>(null);
 
   // Keep a ref of the current address to avoid stale closures in event listeners
-  // and async callbacks.
+  // and async callbacks. Every setter below already writes the ref alongside the
+  // state, so this effect only keeps them in step for addresses that reach the
+  // state some other way. Refs are not written during render (react-hooks/refs).
   const addressRef = useRef<string | null>(address);
-  addressRef.current = address;
+  useEffect(() => {
+    addressRef.current = address;
+  }, [address]);
 
   // Track in-flight checks to prevent duplicate concurrent queries.
   const syncingRef = useRef(false);

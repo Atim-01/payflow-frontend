@@ -6,6 +6,22 @@ All notable changes to payflow-frontend. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Next.js 15 → 16, React 19.0 → 19.3 (#80).** Turbopack is now the default
+  bundler for `next dev` and `next build`. The static export, the
+  `/payflow-frontend` base path and contract-only mode are unchanged: the build
+  was re-verified both plain and with `NEXT_PUBLIC_BASE_PATH` set and
+  `NEXT_PUBLIC_API_URL` empty, and every exported asset and link carries the
+  base path. `eslint.config.mjs` now consumes the flat configs shipped by
+  `eslint-config-next` 16, so the `FlatCompat` bridge and the unused
+  `@eslint/eslintrc` dependency are gone. Two rules that
+  `eslint-plugin-react-hooks` 7 introduces (`set-state-in-effect`, `purity`)
+  are set to `warn` until the data-loading refactor in #185 — complying with
+  them means rewriting how every page loads data, not fixing this upgrade. The
+  `refs` violations they also surfaced (ref mirrors written during render) are
+  fixed in code.
+
 ### Fixed
 
 - **A successful contract read never released its concurrency slot.**

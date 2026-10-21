@@ -8,7 +8,7 @@ import { WebhookDeliveryHistory } from "@/components/WebhookDeliveryHistory";
 import { buildCsv, downloadCsv, exportFilename, type ChargeRow } from "@/lib/csv";
 import { fillBuckets, parseRevenue, type BucketSize, type RevenuePoint } from "@/lib/revenue";
 import { parseMerchantChurn, type MerchantChurnMonth } from "@/lib/churn";
-import { chainMandatesFor, chainMerchantSummary, chainPlanSubscriberCount, chainPlansOf, endable, mandateFunding } from "@/lib/chain";
+import { chainMandatesFor, chainMerchantSummary, chainPlanSubscriberCount, chainPlansOf, chainUnpaidMandates, endable, mandateFunding, type UnpaidMandate } from "@/lib/chain";
 import { config, type ConfiguredToken } from "@/lib/config";
 import { VirtualList } from "@/components/VirtualList";
 
@@ -38,7 +38,7 @@ import {
   remainingDiscountCharges,
   supportsDiscounts,
 } from "@/lib/discount";
-import { MAX_NAME_LEN, mandatePauseUntil, mandateRefundableAmount, mandateSupportsRefund, nameByteLength, payflow, server, decodeContractError } from "@/lib/payflow";
+import { MAX_NAME_LEN, MAX_PAGE, mandatePauseUntil, mandateRefundableAmount, mandateSupportsRefund, nameByteLength, payflow, server, decodeContractError } from "@/lib/payflow";
 import { useWallet } from "@/lib/wallet";
 import { useStream } from "@/lib/stream";
 import {
@@ -68,7 +68,7 @@ import { countOpenMandates } from "@/lib/plans";
 import { formatUsdEstimate, formatUsdcEstimate, useXlmUsdPrice } from "@/lib/price";
 import { AmountInput } from "@/components/AmountInput";
 import { CopyButton } from "@/components/CopyButton";
-import { AddressLink, Badge, Empty, Notice, Panel, SkeletonRows, Stat, TimeAgo, TxLink } from "@/components/ui";
+import { AddressLink, Badge, Dialog, Empty, Notice, Panel, SkeletonRows, Stat, TimeAgo, TxLink } from "@/components/ui";
 
 /** How far back the revenue chart looks, in days. */
 const REVENUE_WINDOW_DAYS = 90;
@@ -847,6 +847,8 @@ export default function MerchantPage() {
   const { address, networkMismatch, signXdr, connect, connecting } = useWallet();
   const [plans, setPlans] = useState<ApiPlan[] | null>(null);
   const [mandates, setMandates] = useState<ApiMandate[] | null>(null);
+  const [unpaidMandates, setUnpaidMandates] = useState<import("@/lib/chain").UnpaidMandate[] | null>(null);
+  const [subscribersTab, setSubscribersTab] = useState<"all" | "unpaid">("all");
   const [summary, setSummary] = useState<MerchantSummary | null>(null);
   /**
    * Per-plan performance stats keyed by plan id.
@@ -894,6 +896,11 @@ export default function MerchantPage() {
   const [confirmPause, setConfirmPause] = useState<number | null>(null);
   // Deactivating a plan asks for confirmation and displays open mandate impact.
   const [confirmDeactivate, setConfirmDeactivate] = useState<number | null>(null);
+  // Bulk deactivation of all active plans: confirmation dialog with progress.
+  const [confirmDeactivateAll, setConfirmDeactivateAll] = useState(false);
+  const [deactivateAllProgress, setDeactivateAllProgress] = useState<{ current: number; total: number } | null>(null);
+  // Set once the bulk run finishes; cleared when the merchant starts another.
+  const [deactivateAllDone, setDeactivateAllDone] = useState(false);
   // Embed snippet code view for plan.
   const [embedFor, setEmbedFor] = useState<number | null>(null);
   const { priceData: xlmPrice } = useXlmUsdPrice();
@@ -1011,6 +1018,53 @@ export default function MerchantPage() {
       }
     }
     setMandates(rows);
+
+    // Load unpaid mandates
+    try {
+      const unpaidResponse = await api.unpaidMandates(address);
+      if (unpaidResponse && unpaidResponse.unpaid) {
+        // Backend provided unpaid list, convert to UnpaidMandate format
+        const now = Math.floor(Date.now() / 1000);
+        const unpaidList: UnpaidMandate[] = await Promise.all(
+          unpaidResponse.unpaid.map(async (mandate) => {
+            try {
+              const amount = BigInt(mandate.amount);
+              const balance = await payflow.vaultBalance(address, mandate.subscriber, mandate.token ?? config.contracts.token);
+              const shortfall = balance !== null && amount > balance ? amount - balance : 0n;
+              return {
+                mandate,
+                shortfall,
+                overdueDuration: now - mandate.next_charge,
+              };
+            } catch {
+              // If vault balance read fails, estimate from mandate being in unpaid list
+              return {
+                mandate,
+                shortfall: BigInt(mandate.amount),
+                overdueDuration: now - mandate.next_charge,
+              };
+            }
+          })
+        );
+        setUnpaidMandates(unpaidList.filter(u => u.shortfall > 0n));
+      } else {
+        // Fallback to contract-only mode
+        try {
+          const unpaidList = await chainUnpaidMandates(address, address);
+          setUnpaidMandates(unpaidList);
+        } catch {
+          setUnpaidMandates([]);
+        }
+      }
+    } catch {
+      // API method doesn't exist or failed - fallback to contract-only mode
+      try {
+        const unpaidList = await chainUnpaidMandates(address, address);
+        setUnpaidMandates(unpaidList);
+      } catch {
+        setUnpaidMandates([]);
+      }
+    }
 
     // Revenue totals come from charge history, which only the indexer has.
     setSummary(s ?? chainMerchantSummary(address, rows));
@@ -1314,6 +1368,63 @@ export default function MerchantPage() {
     }
   }
 
+  /** Count active plans and their open mandates for the bulk deactivation confirmation. */
+  function getDeactivationImpact(): { activePlans: number; openMandates: number } {
+    if (!plans) return { activePlans: 0, openMandates: 0 };
+    let activePlans = 0;
+    let openMandates = 0;
+    for (const p of plans) {
+      if (p.active) {
+        activePlans += 1;
+        const stats = planStats[p.id];
+        openMandates += countOpenMandates(p.id, mandates, stats?.subscriber_count);
+      }
+    }
+    return { activePlans, openMandates };
+  }
+
+  /** Deactivate all active plans by paging through with deactivate_page. */
+  async function deactivateAllPlans() {
+    if (!address || !signXdr) return;
+    const { activePlans } = getDeactivationImpact();
+    if (activePlans === 0) return;
+
+    // Get total plan count to determine how many pages to process.
+    // The contract's deactivate_page works on the full plan index (active + inactive),
+    // so we page through all plans. The contract handles idempotency for already-inactive plans.
+    let totalPlanCount: number;
+    try {
+      totalPlanCount = await payflow.merchantPlanCount(address, address);
+    } catch {
+      // If we can't read the count, fall back to the plans we have loaded.
+      totalPlanCount = plans?.length ?? 0;
+    }
+    const totalPages = Math.max(1, Math.ceil(totalPlanCount / MAX_PAGE));
+    let completedPages = 0;
+
+    setDeactivateAllProgress({ current: 0, total: totalPages });
+    setDeactivateAllDone(false);
+    setError(null);
+
+    try {
+      // Page through from the oldest (start=0) to newest, MAX_PAGE at a time.
+      // The contract's deactivate_page deactivates plans in the given page.
+      for (let start = 0; start < totalPlanCount; start += MAX_PAGE) {
+        const limit = Math.min(MAX_PAGE, totalPlanCount - start);
+        await payflow.deactivatePage(address, signXdr, start, limit);
+        completedPages += 1;
+        setDeactivateAllProgress({ current: completedPages, total: totalPages });
+      }
+      setDeactivateAllDone(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDeactivateAllProgress(null);
+      setConfirmDeactivateAll(false);
+      await load();
+    }
+  }
+
   if (!address) {
     return (
       <Panel title="Merchant dashboard">
@@ -1415,6 +1526,9 @@ export default function MerchantPage() {
       </div>
 
       {error && <Notice tone="error">{error}</Notice>}
+      {deactivateAllDone && (
+        <Notice tone="ok">All active plans deactivated.</Notice>
+      )}
       {done && (
         <Notice tone="ok">
           Done. Transaction <TxLink hash={done} />
@@ -1633,15 +1747,26 @@ export default function MerchantPage() {
       <Panel
         title="My plans"
         actions={
-          <div className="flex items-center gap-2">
-            <Link
-              href={`/m/?address=${address}`}
-              className="btn-ghost whitespace-nowrap"
-            >
-              Public page
-            </Link>
-            <CopyButton value={publicUrl} label="public page link" />
-          </div>
+          <>
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/m/?address=${address}`}
+                className="btn-ghost whitespace-nowrap"
+              >
+                Public page
+              </Link>
+              <CopyButton value={publicUrl} label="public page link" />
+            </div>
+            {(plans ?? []).some((p) => p.active) && !busy && !networkMismatch && deactivateAllProgress === null && (
+              <button
+                type="button"
+                className="btn-ghost text-danger whitespace-nowrap"
+                onClick={() => setConfirmDeactivateAll(true)}
+              >
+                Deactivate all plans
+              </button>
+            )}
+          </>
         }
       >
         {plans === null ? (
@@ -1858,19 +1983,72 @@ export default function MerchantPage() {
 
       <Panel
         title="Subscribers"
-        subtitle="Charging is permissionless — you can settle a due mandate yourself instead of waiting for the keeper."
+        subtitle={
+          subscribersTab === "all"
+            ? "Charging is permissionless — you can settle a due mandate yourself instead of waiting for the keeper."
+            : "Active mandates where the subscriber's vault cannot cover the next charge."
+        }
         actions={
-          <button
-            type="button"
-            className="btn-ghost mono text-sm"
-            disabled={exporting || mandates?.length === 0 || networkMismatch}
-            onClick={() => void exportCsv()}
-            aria-label="Export charges to CSV"
-          >
-            {exporting ? "Exporting…" : "Export CSV"}
-          </button>
+          <div className="flex items-center gap-3">
+            {/* Tab navigation */}
+            <div className="flex rounded-lg border border-edge bg-surface/30" role="tablist" aria-label="Subscriber views">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={subscribersTab === "all"}
+                aria-controls="subscribers-all-panel"
+                id="subscribers-all-tab"
+                className={`px-3 py-1.5 text-sm font-medium transition-colors rounded-l-lg ${
+                  subscribersTab === "all"
+                    ? "bg-accent text-white"
+                    : "text-muted hover:text-fg"
+                }`}
+                onClick={() => setSubscribersTab("all")}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={subscribersTab === "unpaid"}
+                aria-controls="subscribers-unpaid-panel"
+                id="subscribers-unpaid-tab"
+                className={`px-3 py-1.5 text-sm font-medium transition-colors rounded-r-lg ${
+                  subscribersTab === "unpaid"
+                    ? "bg-accent text-white"
+                    : "text-muted hover:text-fg"
+                }`}
+                onClick={() => setSubscribersTab("unpaid")}
+              >
+                Unpaid
+                {unpaidMandates && unpaidMandates.length > 0 && (
+                  <span className="ml-1.5 rounded-full bg-danger px-1.5 py-0.5 text-xs font-semibold text-white">
+                    {unpaidMandates.length}
+                  </span>
+                )}
+              </button>
+            </div>
+            {subscribersTab === "all" && (
+              <button
+                type="button"
+                className="btn-ghost mono text-sm"
+                disabled={exporting || mandates?.length === 0 || networkMismatch}
+                onClick={() => void exportCsv()}
+                aria-label="Export charges to CSV"
+              >
+                {exporting ? "Exporting…" : "Export CSV"}
+              </button>
+            )}
+          </div>
         }
       >
+        {/* All Subscribers Tab */}
+        <div
+          role="tabpanel"
+          id="subscribers-all-panel"
+          aria-labelledby="subscribers-all-tab"
+          hidden={subscribersTab !== "all"}
+        >
         {mandates === null ? (
           <SkeletonRows rows={3} label="Loading subscribers" />
         ) : mandates.length === 0 ? (
@@ -2164,9 +2342,148 @@ export default function MerchantPage() {
             }}
           />
         )}
+        </div>
+
+        {/* Unpaid Subscribers Tab */}
+        <div
+          role="tabpanel"
+          id="subscribers-unpaid-panel"
+          aria-labelledby="subscribers-unpaid-tab"
+          hidden={subscribersTab !== "unpaid"}
+        >
+          {unpaidMandates === null ? (
+            <SkeletonRows rows={2} label="Loading unpaid subscribers" />
+          ) : unpaidMandates.length === 0 ? (
+            <Empty title="All subscribers are funded">
+              Every active mandate due for charging has sufficient vault balance.
+              Subscribers with insufficient funds will appear here.
+            </Empty>
+          ) : (
+            <div className="space-y-3">
+              {unpaidMandates.map((unpaid) => {
+                const m = unpaid.mandate;
+                const meta = metaFor(metas, m.token ?? config.contracts.token);
+                const badge = discountBadge(m);
+                const overdueHours = Math.floor(unpaid.overdueDuration / 3600);
+                const overdueDays = Math.floor(unpaid.overdueDuration / 86400);
+                const overdueText =
+                  overdueDays > 0
+                    ? `${overdueDays} day${overdueDays === 1 ? "" : "s"}`
+                    : overdueHours > 0
+                      ? `${overdueHours} hour${overdueHours === 1 ? "" : "s"}`
+                      : "less than 1 hour";
+                return (
+                  <div
+                    key={m.id}
+                    className="rounded-lg border border-danger/40 bg-danger/5 p-4"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Link
+                            href={`/mandates/?id=${m.id}`}
+                            className="font-medium hover:underline text-soft focus:outline-none focus:ring-1 focus:ring-accent rounded"
+                          >
+                            #{m.id}
+                          </Link>
+                          <AddressLink value={m.subscriber} />
+                          <Badge status={m.status} />
+                          {badge && (
+                            <span className="rounded-full bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent">
+                              {badge}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1 text-sm text-muted">
+                          {fromStroops(m.amount, 4, meta.decimals)} {meta.symbol}{" "}
+                          {formatPeriod(m.period)} · {m.charges_made} settled
+                        </div>
+                        <div className="mt-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2">
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                            <div className="text-sm">
+                              <span className="font-medium text-danger">
+                                Short by {fromStroops(unpaid.shortfall, 4, meta.decimals)} {meta.symbol}
+                              </span>
+                            </div>
+                            <div className="text-xs text-muted">
+                              Overdue for {overdueText}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <CopyButton value={m.subscriber} label="subscriber address" />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </Panel>
 
       <WebhooksPanel key={`webhooks:${address}`} merchant={address} apiConfigured={api.isConfigured()} />
+
+      {confirmDeactivateAll && (
+        <Dialog
+          open={confirmDeactivateAll}
+          onClose={() => setConfirmDeactivateAll(false)}
+          title="Deactivate all active plans"
+          actions={
+            <>
+              <button
+                type="button"
+                className="btn-ghost"
+                disabled={busy !== null || deactivateAllProgress !== null}
+                onClick={() => setConfirmDeactivateAll(false)}
+              >
+                Keep active
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={busy !== null || networkMismatch || deactivateAllProgress !== null}
+                onClick={() => void deactivateAllPlans()}
+              >
+                {deactivateAllProgress
+                  ? `Deactivating… (${deactivateAllProgress.current}/${deactivateAllProgress.total} pages)`
+                  : "Confirm: deactivate all"}
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-2 text-sm">
+            {(() => {
+              const { activePlans, openMandates } = getDeactivationImpact();
+              if (activePlans === 0) {
+                return <p className="text-muted">No active plans to deactivate.</p>;
+              }
+              // Total pages will be determined at runtime from the contract's plan count.
+              // We show the active plan count and open mandates; the progress dialog
+              // will display the actual page count as it runs.
+              return (
+                <>
+                  <p>
+                    This will deactivate <strong>{activePlans}</strong> active plan{activePlans === 1 ? "" : "s"}.
+                  </p>
+                  <p className="text-muted">
+                    Affected open subscriptions: <strong>{openMandates}</strong>{" "}
+                    {openMandates === 1 ? "mandate" : "mandates"}.
+                  </p>
+                  <p className="text-muted">
+                    Existing subscribers will continue to be billed on schedule until their subscriptions are individually ended
+                    or cancelled. New subscribers will no longer be able to subscribe to these plans.
+                  </p>
+                  <p className="text-xs text-muted">
+                    The operation pages through all plans in batches of {MAX_PAGE}; progress will be shown once confirmed.
+                  </p>
+                </>
+              );
+            })()}
+          </div>
+        </Dialog>
+      )}
     </div>
   );
 }

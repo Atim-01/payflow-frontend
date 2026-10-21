@@ -59,6 +59,8 @@ vi.mock("@/lib/payflow", () => ({
   mandatePastDueUntil: () => null,
   // payflow-contract#29 not shipped; the sponsor panel stays off.
   vaultSupportsDepositFor: async () => false,
+  // payflow-contract#28 not shipped; the spend limit panel stays off.
+  mandateSupportsSpendLimit: () => false,
 }));
 vi.mock("@/lib/chain", () => ({ chainMandatesOf: chainMock.chainMandatesOf }));
 

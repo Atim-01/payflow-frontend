@@ -122,6 +122,19 @@ export function WalletLayoutInner({ children }: { children: React.ReactNode }) {
         </div>
       )}
       <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-5 print:block print:max-w-none print:px-0">
+        {/*
+          Skip-navigation link: invisible until focused via keyboard. Lets
+          screen-reader and keyboard users jump straight to the page content
+          without tabbing through the header on every navigation. The href
+          matches the id on <main> below. A Next.js <Link> would prefetch
+          the current page unnecessarily, so a plain anchor is correct here.
+        */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:m-2 focus:rounded-lg focus:bg-panel focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-fg focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-accent"
+        >
+          Skip to content
+        </a>
         <header className="border-b border-edge py-4 sm:py-5 print:hidden">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-6">
@@ -210,7 +223,7 @@ export function WalletLayoutInner({ children }: { children: React.ReactNode }) {
           </nav>
         </header>
 
-        <main className="flex-1 py-8 print:py-0">{children}</main>
+        <main id="main-content" className="flex-1 py-8 print:py-0">{children}</main>
 
         {/*
           Footer displays the build version and short commit hash (injected

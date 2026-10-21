@@ -462,6 +462,17 @@ export const api = {
     ),
 
   /**
+   * Unpaid subscribers for a merchant, proposed by payflow-backend#146.
+   *
+   * Returns active mandates where the subscriber's vault balance cannot cover
+   * the next charge. Returns null when the backend is unreachable or does not
+   * yet serve this endpoint — the UI falls back to checking vault balances
+   * from contract state.
+   */
+  unpaidMandates: (merchant: string) =>
+    get<{ unpaid: ApiMandate[] }>(`/api/merchants/${merchant}/unpaid`),
+
+  /**
    * Open an SSE stream for live updates scoped to the given address.
    *
    * The backend must be configured (NEXT_PUBLIC_API_URL set) and the deployed

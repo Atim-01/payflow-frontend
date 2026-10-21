@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { useEffect } from "react";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SIGNATURE_CANCELLED_MESSAGE } from "@/lib/signature-error";
 import {
@@ -470,3 +470,162 @@ describe("WalletProvider and account change detection", () => {
   });
 });
 
+
+describe("WalletProvider connection and signing lifecycle", () => {
+  const kit = {
+    setWallet: vi.fn(),
+    getAddress: vi.fn(),
+    getNetwork: vi.fn(),
+    signTransaction: vi.fn(),
+    openModal: vi.fn(),
+    disconnect: vi.fn(),
+  };
+
+  function mountWallet() {
+    return renderHook(() => useWallet(), { wrapper: WalletProvider });
+  }
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    vi.resetAllMocks();
+    kit.getAddress.mockResolvedValue({ address: ADDRESS_A });
+    kit.getNetwork.mockResolvedValue({ networkPassphrase: TESTNET_PASSPHRASE });
+    kit.signTransaction.mockResolvedValue({ signedTxXdr: "SIGNED_XDR" });
+    kit.disconnect.mockResolvedValue(undefined);
+    kit.openModal.mockImplementation(async ({ onWalletSelected }) => {
+      await onWalletSelected({ id: WALLET_ID });
+    });
+    setKitPromiseForTesting(Promise.resolve(kit as unknown as StellarWalletsKit));
+  });
+
+  afterEach(() => {
+    cleanup();
+    setKitPromiseForTesting(null);
+    window.localStorage.clear();
+  });
+
+  it("starts disconnected without prompting or querying a wallet", () => {
+    const { result } = mountWallet();
+    expect(result.current.address).toBeNull();
+    expect(result.current.connecting).toBe(false);
+    expect(kit.openModal).not.toHaveBeenCalled();
+    expect(kit.getAddress).not.toHaveBeenCalled();
+  });
+
+  it("connects through the selected wallet and persists its public session", async () => {
+    const { result } = mountWallet();
+    await act(async () => result.current.connect());
+    expect(kit.setWallet).toHaveBeenCalledWith(WALLET_ID);
+    expect(result.current.address).toBe(ADDRESS_A);
+    expect(result.current.walletNetwork).toBe(TESTNET_PASSPHRASE);
+    expect(result.current.connecting).toBe(false);
+    expect(result.current.error).toBeNull();
+    expect(parseStoredSession(localStorage.getItem(STORAGE_KEY))).toEqual({
+      walletId: WALLET_ID,
+      address: ADDRESS_A,
+    });
+  });
+
+  it("stays connecting until the modal closes without a selection", async () => {
+    let close: (() => void) | undefined;
+    kit.openModal.mockImplementationOnce(async ({ onClosed }) => { close = onClosed; });
+    const { result } = mountWallet();
+    await act(async () => result.current.connect());
+    expect(result.current.connecting).toBe(true);
+    act(() => close?.());
+    expect(result.current.connecting).toBe(false);
+    expect(result.current.address).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it("reports a modal failure and allows retrying the connection", async () => {
+    kit.openModal.mockRejectedValueOnce(new Error("Wallet unavailable"));
+    const { result } = mountWallet();
+    await act(async () => result.current.connect());
+    expect(result.current.error).toBe("Wallet unavailable");
+    expect(result.current.connecting).toBe(false);
+    expect(result.current.address).toBeNull();
+    await act(async () => result.current.connect());
+    expect(result.current.address).toBe(ADDRESS_A);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("does not store a session when reading the selected account fails", async () => {
+    kit.getAddress.mockRejectedValueOnce(new Error("Account locked"));
+    const { result } = mountWallet();
+    await act(async () => result.current.connect());
+    expect(result.current.error).toBe("Account locked");
+    expect(result.current.connecting).toBe(false);
+    expect(result.current.address).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it("removes corrupt stored sessions without opening the wallet modal", () => {
+    localStorage.setItem(STORAGE_KEY, "not-json");
+    const { result } = mountWallet();
+    expect(result.current.address).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(kit.openModal).not.toHaveBeenCalled();
+    expect(kit.setWallet).not.toHaveBeenCalled();
+  });
+
+  it("restores a session silently and exposes the wallet's network mismatch", async () => {
+    localStorage.setItem(STORAGE_KEY, serializeSession(WALLET_ID, ADDRESS_A));
+    kit.getNetwork.mockResolvedValue({ networkPassphrase: PUBLIC_PASSPHRASE });
+    const { result } = mountWallet();
+    await waitFor(() => expect(result.current.networkMismatch).toBe(true));
+    expect(result.current.address).toBe(ADDRESS_A);
+    expect(result.current.walletNetwork).toBe(PUBLIC_PASSPHRASE);
+    expect(kit.openModal).not.toHaveBeenCalled();
+    await expect(result.current.signXdr("UNSIGNED")).rejects.toThrow("correct network");
+    expect(kit.signTransaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects signing while disconnected before accessing the wallet", async () => {
+    const { result } = mountWallet();
+    await expect(result.current.signXdr("UNSIGNED")).rejects.toThrow("Connect a wallet first");
+    expect(kit.getAddress).not.toHaveBeenCalled();
+    expect(kit.signTransaction).not.toHaveBeenCalled();
+  });
+
+  it("passes the configured network and active public address when signing", async () => {
+    const { result } = mountWallet();
+    await act(async () => result.current.connect());
+    await expect(result.current.signXdr("UNSIGNED")).resolves.toBe("SIGNED_XDR");
+    expect(kit.signTransaction).toHaveBeenCalledWith("UNSIGNED", {
+      networkPassphrase: TESTNET_PASSPHRASE,
+      address: ADDRESS_A,
+    });
+  });
+
+  it("propagates account-read errors without requesting a signature", async () => {
+    const { result } = mountWallet();
+    await act(async () => result.current.connect());
+    kit.getAddress.mockRejectedValueOnce(new Error("Extension disconnected"));
+    await expect(result.current.signXdr("UNSIGNED")).rejects.toThrow("Extension disconnected");
+    expect(kit.signTransaction).not.toHaveBeenCalled();
+  });
+
+  it("clears session and mismatch even when the wallet cannot disconnect", async () => {
+    kit.getNetwork.mockResolvedValue({ networkPassphrase: PUBLIC_PASSPHRASE });
+    const { result } = mountWallet();
+    await act(async () => result.current.connect());
+    expect(result.current.networkMismatch).toBe(true);
+    kit.disconnect.mockRejectedValueOnce(new Error("Disconnect is unsupported"));
+    await act(async () => result.current.disconnect());
+    expect(result.current.address).toBeNull();
+    expect(result.current.walletNetwork).toBeNull();
+    expect(result.current.networkMismatch).toBe(false);
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it("removes account-change listeners when the provider unmounts", async () => {
+    const { result, unmount } = mountWallet();
+    await act(async () => result.current.connect());
+    unmount();
+    kit.getAddress.mockClear();
+    window.dispatchEvent(new Event("focus"));
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(kit.getAddress).not.toHaveBeenCalled();
+  });
+});

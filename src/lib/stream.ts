@@ -75,7 +75,7 @@ export function useStream({
   }, [address, enabled, close]);
 
   // Schedule a reconnect with exponential backoff
-  scheduleReconnectRef.current = useCallback(() => {
+  const scheduleReconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) return; // already scheduled
 
     const attempt = reconnectAttemptRef.current;
@@ -90,8 +90,17 @@ export function useStream({
     }, totalDelay);
   }, []);
 
+  // The two callback refs are mirrored in effects, not written during render
+  // (react-hooks/refs). Every consumer — the timers, the EventSource handlers
+  // and the open/close effect at the bottom of this hook — runs after effects
+  // flush, and these effects are declared before that one, so mount order is
+  // unchanged.
+  useEffect(() => {
+    scheduleReconnectRef.current = scheduleReconnect;
+  }, [scheduleReconnect]);
+
   // Open the SSE connection
-  openRef.current = useCallback(() => {
+  const openConnection = useCallback(() => {
     if (!address || !enabled || !api.isConfigured()) return;
 
     const es = api.stream(address, role);
@@ -132,6 +141,9 @@ export function useStream({
       }
     };
   }, [address, role, enabled, onEvent]);
+  useEffect(() => {
+    openRef.current = openConnection;
+  }, [openConnection]);
 
   // Open/close based on enabled, address, and API configuration
   useEffect(() => {

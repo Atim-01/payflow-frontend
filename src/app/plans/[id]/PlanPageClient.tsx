@@ -32,7 +32,11 @@ export function PlanPageClient({ planId }: PlanPageClientProps) {
 
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const walletState = useRef({ address, networkMismatch });
-  walletState.current = { address, networkMismatch };
+  // Mirrored in an effect: only the signing flow reads it (event handler /
+  // async callback), never render.
+  useEffect(() => {
+    walletState.current = { address, networkMismatch };
+  }, [address, networkMismatch]);
   useEffect(() => {
     const timer = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
     return () => clearInterval(timer);
