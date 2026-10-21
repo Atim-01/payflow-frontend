@@ -12,6 +12,7 @@ import {
 } from "react";
 import type { StellarWalletsKit } from "@creit.tech/stellar-wallets-kit";
 import { config } from "./config";
+import { createWalletModules } from "./wallet-modules";
 import type { SignXdr } from "./payflow";
 import { translateSignatureError } from "./signature-error";
 
@@ -90,10 +91,13 @@ export async function getKit(): Promise<StellarWalletsKit> {
   if (!kitPromise) {
     kitPromise = (async () => {
       const mod = await import("@creit.tech/stellar-wallets-kit");
-      return new mod.StellarWalletsKit({
-        network: config.networkPassphrase as unknown as (typeof mod.WalletNetwork)[keyof typeof mod.WalletNetwork],
-        modules: mod.allowAllModules(),
+      const network = config.networkPassphrase as (typeof mod.WalletNetwork)[keyof typeof mod.WalletNetwork];
+      const modules = await createWalletModules(mod.allowAllModules, {
+        projectId: config.walletConnectProjectId,
+        network,
+        appUrl: `${window.location.origin}${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/`,
       });
+      return new mod.StellarWalletsKit({ network, modules });
     })();
   }
   return kitPromise;

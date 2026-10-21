@@ -52,6 +52,7 @@ export const CONFIGURED_TOKENS: readonly ConfiguredToken[] = [
 ];
 
 export const config = {
+  walletConnectProjectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "",
   rpcUrl:
     process.env.NEXT_PUBLIC_SOROBAN_RPC_URL ?? "https://soroban-testnet.stellar.org",
   /** Horizon serves account `home_domain`s (stellar.toml names); RPC does not. */
