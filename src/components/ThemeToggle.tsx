@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/i18n/provider";
+
 import { useEffect, useState } from "react";
 import {
   applyTheme,
@@ -80,19 +82,20 @@ function SystemIcon() {
  * control is understandable without seeing the icon.
  */
 export function ThemeToggle() {
+  const { t: tr } = useI18n();
   // The static export is prerendered without localStorage. Start on the same
   // value the server rendered, then adopt the saved choice after mount; the
   // inline script has already painted the right colours by then.
   const [theme, setTheme] = useState<ThemePreference>("system");
 
   useEffect(() => {
-    setTheme(storedTheme(window.localStorage));
+    try { setTheme(storedTheme(window.localStorage)); } catch { /* Storage is optional. */ }
   }, []);
 
   function choose(next: ThemePreference) {
     setTheme(next);
     applyTheme(next);
-    saveTheme(window.localStorage, next);
+    try { saveTheme(window.localStorage, next); } catch { /* In-memory theme still works. */ }
   }
 
   const next = NEXT[theme];
@@ -102,8 +105,8 @@ export function ThemeToggle() {
       type="button"
       onClick={() => choose(next)}
       className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-edge text-muted transition hover:border-muted hover:bg-fg/5 hover:text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-      aria-label={`Colour theme: ${LABEL[theme]}. Switch to ${LABEL[next].toLowerCase()}.`}
-      title={`Colour theme: ${LABEL[theme]} — switch to ${LABEL[next]}`}
+      aria-label={tr("Colour theme: {0}. Switch to {1}.", { "0": tr(LABEL[theme]), "1": tr(LABEL[next]) })}
+      title={tr("Colour theme: {0} — switch to {1}", { "0": tr(LABEL[theme]), "1": tr(LABEL[next]) })}
     >
       {theme === "light" ? (
         <SunIcon />

@@ -1,6 +1,9 @@
 "use client";
 
+import { useI18n } from "@/i18n/provider";
+
 import Link from "next/link";
+import { LanguagePicker } from "@/i18n/LanguagePicker";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -41,6 +44,7 @@ function isCurrent(pathname: string, href: string): boolean {
  * component so it can keep exporting `metadata`.
  */
 export function WalletLayoutInner({ children }: { children: React.ReactNode }) {
+  const { t: tr } = useI18n();
   const { networkMismatch, walletNetwork, address } = useWallet();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -48,7 +52,8 @@ export function WalletLayoutInner({ children }: { children: React.ReactNode }) {
   const toggleRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLElement>(null);
 
-  const walletName = typeof window !== "undefined" ? window.localStorage.getItem("payflow.wallet") : null;
+  let walletName: string | null = null;
+  try { walletName = typeof window !== "undefined" ? window.localStorage.getItem("payflow.wallet") : null; } catch { /* Storage is optional. */ }
   let walletDisplayName = "Unknown";
   if (walletName) {
     try {
@@ -132,16 +137,13 @@ export function WalletLayoutInner({ children }: { children: React.ReactNode }) {
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:m-2 focus:rounded-lg focus:bg-panel focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-fg focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-accent"
-        >
-          Skip to content
-        </a>
+        >{tr("Skip to content")}</a>
         <header className="border-b border-edge py-4 sm:py-5 print:hidden">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-6">
-              <Link href="/" className="shrink-0 text-lg font-semibold tracking-tight">
-                Pay<span className="text-accent">flow</span>
+              <Link href="/" className="shrink-0 text-lg font-semibold tracking-tight">{tr("Pay")}<span className="text-accent">{tr("flow")}</span>
               </Link>
-              <nav className="hidden gap-4 text-sm text-muted md:flex" aria-label="Main navigation">
+              <nav className="hidden gap-4 text-sm text-muted md:flex" aria-label={tr("Main navigation")}>
                 {NAV.map((item) => (
                   <Link
                     key={item.href}
@@ -151,7 +153,7 @@ export function WalletLayoutInner({ children }: { children: React.ReactNode }) {
                       isCurrent(pathname, item.href) ? "text-fg" : ""
                     }`}
                   >
-                    {item.label}
+                    {tr(item.label)}
                   </Link>
                 ))}
               </nav>
@@ -166,7 +168,7 @@ export function WalletLayoutInner({ children }: { children: React.ReactNode }) {
                 onClick={() => setOpen((value) => !value)}
                 aria-expanded={open}
                 aria-controls="mobile-nav"
-                aria-label={open ? "Close menu" : "Open menu"}
+                aria-label={open ?tr("Close menu") :tr("Open menu")}
                 className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-edge text-muted transition hover:border-muted hover:bg-fg/5 hover:text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:hidden"
               >
                 {open ? (
@@ -198,10 +200,11 @@ export function WalletLayoutInner({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
+          <div className="mt-3 flex justify-end"><LanguagePicker /></div>
           <nav
             id="mobile-nav"
             ref={menuRef}
-            aria-label="Main navigation"
+            aria-label={tr("Main navigation")}
             hidden={!open}
             className="mt-3 border-t border-edge pt-3 md:hidden"
           >
@@ -215,7 +218,7 @@ export function WalletLayoutInner({ children }: { children: React.ReactNode }) {
                       isCurrent(pathname, item.href) ? "bg-fg/5 text-fg" : ""
                     }`}
                   >
-                    {item.label}
+                    {tr(item.label)}
                   </Link>
                 </li>
               ))}
@@ -236,12 +239,12 @@ export function WalletLayoutInner({ children }: { children: React.ReactNode }) {
           <div className="flex flex-col gap-3">
             <div
               className="flex flex-wrap items-center gap-x-4 gap-y-1.5"
-              aria-label="Deployed protocol contracts"
+              aria-label={tr("Deployed protocol contracts")}
             >
-              <span className="font-medium text-soft">Contracts:</span>
+              <span className="font-medium text-soft">{tr("Contracts:")}</span>
               {contractLinks.map((contract) => (
                 <span key={contract.name} className="inline-flex items-center gap-1">
-                  <span>{contract.name}:</span>
+                  <span>{tr(contract.name)}:</span>
                   {contract.url ? (
                     <a
                       href={contract.url}
@@ -249,19 +252,19 @@ export function WalletLayoutInner({ children }: { children: React.ReactNode }) {
                       rel="noreferrer"
                       className="mono text-muted underline-offset-2 hover:text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
                       title={contract.id}
-                      aria-label={`${contract.name} contract on Stellar Expert: ${contract.id}`}
+                      aria-label={tr("{0} contract on Stellar Expert: {1}", { "0": contract.name, "1": contract.id })}
                     >
                       {contract.shortId}
                     </a>
                   ) : (
-                    <span className="text-muted">not configured</span>
+                    <span className="text-muted">{tr("not configured")}</span>
                   )}
                 </span>
               ))}
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-muted">
-              <span>Stellar testnet · unaudited · do not use with real funds</span>
+              <span>{tr("Stellar testnet · unaudited · do not use with real funds")}</span>
               <div className="flex items-center gap-2">
                 {(versionText || commitShort) && (
                   <>
@@ -276,8 +279,8 @@ export function WalletLayoutInner({ children }: { children: React.ReactNode }) {
                               target="_blank"
                               rel="noreferrer"
                               className="mono underline-offset-2 hover:text-soft hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
-                              title={`Git commit ${commitShort}`}
-                              aria-label={`Git commit ${commitShort}`}
+                              title={tr("Git commit {0}", { "0": commitShort })}
+                              aria-label={tr("Git commit {0}", { "0": commitShort })}
                             >
                               {commitShort}
                             </a>
@@ -295,7 +298,7 @@ export function WalletLayoutInner({ children }: { children: React.ReactNode }) {
                   type="button"
                   onClick={handleCopyDebugInfo}
                   className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-muted border border-edge hover:bg-fg/5 hover:text-fg hover:border-muted transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                  aria-label="Copy debug information for bug reports"
+                  aria-label={tr("Copy debug information for bug reports")}
                 >
                   <svg
                     viewBox="0 0 24 24"
@@ -310,16 +313,14 @@ export function WalletLayoutInner({ children }: { children: React.ReactNode }) {
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                   </svg>
-                  {copied ? "Copied!" : "Copy debug info"}
+                  {copied ?tr("Copied!") :tr("Copy debug info")}
                 </button>
                 <a
                   href="https://github.com/MMM-pay"
                   target="_blank"
                   rel="noreferrer"
                   className="hover:text-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
-                >
-                  GitHub
-                </a>
+                >{tr("GitHub")}</a>
               </div>
             </div>
           </div>

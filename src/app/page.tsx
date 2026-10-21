@@ -1,12 +1,14 @@
 "use client";
 
+import { useI18n } from "@/i18n/provider";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, type ProtocolStats, type RecentCharge } from "@/lib/api";
 import { chainProtocolStats } from "@/lib/chain";
 import { config } from "@/lib/config";
 import { AddressLink, Panel, Stat, TxLink } from "@/components/ui";
-import { formatAmount, formatDate, shortAddress } from "@/lib/format";
+import{ shortAddress } from "@/lib/format";
 import { metaFor, useTokenMetas } from "@/lib/token";
 
 const STEPS = [
@@ -29,6 +31,7 @@ const STEPS = [
 ];
 
 export default function HomePage() {
+  const { t: tr, formatAmount, formatDate } = useI18n();
   const [stats, setStats] = useState<ProtocolStats | null>(null);
   const [contractPlanCount, setContractPlanCount] = useState<number | null>(null);
   const [recentCharges, setRecentCharges] = useState<RecentCharge[] | null>(null);
@@ -60,57 +63,45 @@ export default function HomePage() {
   return (
     <div className="space-y-10">
       <section className="space-y-4">
-        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-          Recurring payments that Stellar could not do before.
-        </h1>
-        <p className="max-w-2xl text-muted">
-          Stellar payments are push-only: the account holding the funds must sign every
-          transfer. That makes one-off payments simple and subscriptions impossible without
-          custody. Payflow adds the missing primitive — a bounded, revocable{" "}
-          <strong className="text-soft">mandate</strong> the subscriber signs once.
-        </p>
+        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">{tr("Recurring payments that Stellar could not do before.")}</h1>
+        <p className="max-w-2xl text-muted">{tr("Stellar payments are push-only: the account holding the funds must sign every transfer. That makes one-off payments simple and subscriptions impossible without custody. Payflow adds the missing primitive — a bounded, revocable")}{" "}
+          <strong className="text-soft">{tr("mandate")}</strong>{" "}{tr("the subscriber signs once.")}</p>
         <div className="flex flex-wrap gap-3 pt-1">
-          <Link href="/subscribe" className="btn-primary">
-            Browse plans
-          </Link>
-          <Link href="/merchant" className="btn-ghost">
-            I&apos;m a merchant
-          </Link>
+          <Link href="/subscribe" className="btn-primary">{tr("Browse plans")}</Link>
+          <Link href="/merchant" className="btn-ghost">{tr("I'm a merchant")}</Link>
         </div>
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat
-          label="Plans"
+          label={tr("Plans")}
           value={loaded ? (stats?.plans ?? contractPlanCount ?? "—") : "…"}
-          hint={!stats && contractPlanCount !== null ? "from contract" : undefined}
+          hint={!stats && contractPlanCount !== null ?tr("from contract") : undefined}
         />
         <Stat
-          label="Mandates"
+          label={tr("Mandates")}
           value={loaded ? (stats?.mandates ?? "—") : "…"}
-          hint={!stats ? "needs indexer" : undefined}
+          hint={!stats ?tr("needs indexer") : undefined}
         />
         <Stat
-          label="Active"
+          label={tr("Active")}
           value={loaded ? (stats?.activeMandates ?? "—") : "…"}
-          hint={stats ? "currently billable" : "needs indexer"}
+          hint={stats ?tr("currently billable") :tr("needs indexer")}
         />
         <Stat
-          label="Charges settled"
+          label={tr("Charges settled")}
           value={loaded ? (stats?.charges ?? "—") : "…"}
-          hint={stats ? `ledger ${stats.lastIndexedLedger}` : "needs indexer"}
+          hint={stats ?tr("ledger {0}", { "0": String(stats.lastIndexedLedger) }) :tr("needs indexer")}
         />
       </section>
 
       {loaded && !stats && (
-        <p className="text-sm text-muted">
-          The indexer is unreachable, so historical activity counters require the indexer.
-          {contractPlanCount !== null ? " Plan count is loaded directly from contract state." : ""}
+        <p className="text-sm text-muted">{tr("The indexer is unreachable, so historical activity counters require the indexer.")}{contractPlanCount !== null ?tr(" Plan count is loaded directly from contract state.") : ""}
         </p>
       )}
 
       {recentCharges !== null && recentCharges.length > 0 && (
-        <Panel title="Recent activity" subtitle="Latest charges settled across the protocol">
+        <Panel title={tr("Recent activity")} subtitle={tr("Latest charges settled across the protocol")}>
           <div className="space-y-2">
             {recentCharges.map((charge) => (
               <div
@@ -118,8 +109,8 @@ export default function HomePage() {
                 className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-edge p-3"
               >
                 <div className="flex items-center gap-3 text-sm">
-                  <span className="font-medium">{charge.plan_name || `Plan #${charge.plan_id}`}</span>
-                  <span className="mono text-xs text-muted">tx</span>
+                  <span className="font-medium">{charge.plan_name ||tr("Plan #{0}", { "0": charge.plan_id })}</span>
+                  <span className="mono text-xs text-muted">{tr("tx")}</span>
                   <TxLink hash={charge.tx_hash} />
                 </div>
                 <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
@@ -139,7 +130,7 @@ export default function HomePage() {
         </Panel>
       )}
 
-      <Panel title="How it works">
+      <Panel title={tr("How it works")}>
         <ol className="space-y-4">
           {STEPS.map((step, i) => (
             <li key={step.title} className="flex gap-4">
@@ -147,15 +138,15 @@ export default function HomePage() {
                 {i + 1}
               </span>
               <div>
-                <h3 className="text-sm font-medium">{step.title}</h3>
-                <p className="mt-1 text-sm text-muted">{step.body}</p>
+                <h3 className="text-sm font-medium">{tr(step.title)}</h3>
+                <p className="mt-1 text-sm text-muted">{tr(step.body)}</p>
               </div>
             </li>
           ))}
         </ol>
       </Panel>
 
-      <Panel title="Deployed contracts" subtitle="Stellar testnet">
+      <Panel title={tr("Deployed contracts")} subtitle={tr("Stellar testnet")}>
         <dl className="space-y-3 text-sm">
           {[
             ["Plan registry", config.contracts.planRegistry],
@@ -163,8 +154,8 @@ export default function HomePage() {
             ["Subscription", config.contracts.subscription],
           ].map(([label, id]) => (
             <div key={label} className="flex flex-wrap items-center justify-between gap-2">
-              <dt className="text-muted">{label}</dt>
-              <dd>{id ? <AddressLink value={id} kind="contract" /> : <span className="text-muted">not configured</span>}</dd>
+              <dt className="text-muted">{typeof label === "string" ? tr(label) : label}</dt>
+              <dd>{id ? <AddressLink value={id} kind="contract" /> : <span className="text-muted">{tr("not configured")}</span>}</dd>
             </div>
           ))}
         </dl>

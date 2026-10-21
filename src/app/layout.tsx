@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { I18nProvider } from "@/i18n/provider";
 import { WalletProvider } from "@/lib/wallet";
 import { WalletLayoutInner } from "@/components/WalletLayoutInner";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
@@ -30,9 +31,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body>
+        <I18nProvider>
         <WalletProvider>
           <WalletLayoutInner>{children}</WalletLayoutInner>
         </WalletProvider>
+        </I18nProvider>
       </body>
     </html>
   );

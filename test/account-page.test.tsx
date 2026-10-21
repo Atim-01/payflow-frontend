@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import AccountPage from "@/app/account/page";
 import type { ApiMandate } from "@/lib/api";
-import { minPauseDate, resumeDate } from "@/lib/format";
+import { formatDate } from "@/i18n/format";
+import { minPauseDate } from "@/lib/format";
 
 /**
  * The account page is the first page rendered in tests because it exercises
@@ -555,7 +556,7 @@ describe("AccountPage pause until", () => {
 
     render(<AccountPage />);
 
-    expect(await screen.findByText(`resumes ${resumeDate(until)}`)).toBeTruthy();
+    expect(await screen.findByText(`resumes ${formatDate(until, "en")}`)).toBeTruthy();
   });
 
   it("shows no resume date once it has passed", async () => {
@@ -567,7 +568,7 @@ describe("AccountPage pause until", () => {
     render(<AccountPage />);
     await screen.findByText("Mandate #7");
 
-    expect(screen.queryByText(/resumes \d{4}-/)).toBeNull();
+    expect(screen.queryByText(/resumes /)).toBeNull();
   });
 
   it("does not offer a picker on a cancelled mandate", async () => {

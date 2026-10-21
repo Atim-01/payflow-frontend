@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/i18n/provider";
+
 import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -8,7 +10,7 @@ import { chainMandate } from "@/lib/chain";
 import { config } from "@/lib/config";
 import { mandateStatus, payflow, type Plan } from "@/lib/payflow";
 import { useWallet } from "@/lib/wallet";
-import { formatAmount, formatDate, formatPeriod, fromStroops } from "@/lib/format";
+import{ fromStroops } from "@/lib/format";
 import { metaFor, useTokenMetas } from "@/lib/token";
 import { discountBps, discountedAmount, remainingDiscountCharges } from "@/lib/discount";
 import {
@@ -23,6 +25,7 @@ import {
 } from "@/components/ui";
 
 function MandateDetailsInner() {
+  const { t: tr, formatPeriod, formatDate, formatAmount, translateMessage, formatTokenValue, formatNumber } = useI18n();
   const searchParams = useSearchParams();
   const idParam = searchParams?.get("id");
   const mandateId =
@@ -149,34 +152,27 @@ function MandateDetailsInner() {
   if (!mandateId) {
     return (
       <Empty
-        title="No mandate specified"
+        title={tr("No mandate specified")}
         action={
-          <Link href="/account" className="btn-primary">
-            Go to my account
-          </Link>
+          <Link href="/account" className="btn-primary">{tr("Go to my account")}</Link>
         }
-      >
-        Please provide a mandate ID in the URL, for example: <code>/mandates/?id=1</code>
+      >{tr("Please provide a mandate ID in the URL, for example:")}{" "}<code>/mandates/?id=1</code>
       </Empty>
     );
   }
 
   if (loading) {
-    return <SkeletonRows rows={5} label={`Loading mandate #${mandateId}`} />;
+    return <SkeletonRows rows={5} label={tr("Loading mandate #{0}", { "0": mandateId })} />;
   }
 
   if (!mandate) {
     return (
       <Empty
-        title={`Mandate #${mandateId} not found`}
+        title={tr("Mandate #{0} not found", { "0": mandateId })}
         action={
-          <Link href="/account" className="btn-primary">
-            Go to my account
-          </Link>
+          <Link href="/account" className="btn-primary">{tr("Go to my account")}</Link>
         }
-      >
-        This mandate does not exist or could not be loaded from contract state.
-      </Empty>
+      >{tr("This mandate does not exist or could not be loaded from contract state.")}</Empty>
     );
   }
 
@@ -205,104 +201,96 @@ function MandateDetailsInner() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Mandate #{mandate.id}
+            <h1 className="text-2xl font-semibold tracking-tight">{tr("Mandate #")}{mandate.id}
             </h1>
             <Badge status={status} />
           </div>
           <p className="mt-1 text-sm text-muted">
             {plan?.name ? (
-              <>
-                Subscription to{" "}
+              <>{tr("Subscription to")}{" "}
                 <Link href={`/plans/${mandate.plan_id}`} className="text-accent hover:underline">
                   {plan.name}
                 </Link>
               </>
-            ) : (
-              `Plan #${mandate.plan_id}`
+            ) : (tr("Plan #{0}", { "0": mandate.plan_id })
             )}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Link href="/account" className="btn-ghost text-sm">
-            My account
-          </Link>
-          <Link href="/merchant" className="btn-ghost text-sm">
-            Merchant dashboard
-          </Link>
+          <Link href="/account" className="btn-ghost text-sm">{tr("My account")}</Link>
+          <Link href="/merchant" className="btn-ghost text-sm">{tr("Merchant dashboard")}</Link>
         </div>
       </div>
 
-      {error && <Notice tone="error">{error}</Notice>}
+      {error && <Notice tone="error">{translateMessage(error)}</Notice>}
       {done && (
-        <Notice tone="ok">
-          Done. Transaction <TxLink hash={done} />
+        <Notice tone="ok">{tr("Done. Transaction")}{" "}<TxLink hash={done} />
         </Notice>
       )}
 
       {/* Primary stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat
-          label="Recurring amount"
+          label={tr("Recurring amount")}
           value={`${fromStroops(currentAmount, 4, tokenMeta.decimals)} ${tokenMeta.symbol}`}
-          hint={hasDiscount ? `Discount active (${discBps / 100}% off)` : formatPeriod(mandate.period)}
+          hint={hasDiscount ?tr("Discount active ({0}% off)", { "0": discBps / 100 }) : formatPeriod(mandate.period)}
         />
         <Stat
-          label="Charges made"
+          label={tr("Charges made")}
           value={`${mandate.charges_made} / ${mandate.max_charges > 0 ? mandate.max_charges : "∞"}`}
-          hint={mandate.max_charges > 0 ? `${mandate.max_charges - mandate.charges_made} left` : "open-ended"}
+          hint={mandate.max_charges > 0 ?tr("{0} left", { "0": mandate.max_charges - mandate.charges_made }) :tr("open-ended")}
         />
         <Stat
-          label="Next charge"
-          value={!isTerminal && mandate.next_charge > 0 ? formatDate(mandate.next_charge) : "None"}
-          hint={isDue ? "Due now" : !isTerminal ? "Scheduled" : "Terminal"}
+          label={tr("Next charge")}
+          value={!isTerminal && mandate.next_charge > 0 ? formatDate(mandate.next_charge) : tr("None")}
+          hint={isDue ?tr("Due now") : !isTerminal ?tr("Scheduled") :tr("Terminal")}
         />
         <Stat
-          label="Protocol fee"
+          label={tr("Protocol fee")}
           value={`${mandate.fee_bps / 100}%`}
-          hint={`${fromStroops(feeAmount, 4, tokenMeta.decimals)} ${tokenMeta.symbol}`}
+          hint={`${formatTokenValue(feeAmount, 4, tokenMeta.decimals)} ${tokenMeta.symbol}`}
         />
       </div>
 
       {/* Mandate overview terms */}
-      <Panel title="Mandate details" subtitle="Authorized agreement parameters recorded on-chain">
+      <Panel title={tr("Mandate details")} subtitle={tr("Authorized agreement parameters recorded on-chain")}>
         <div className="divide-y divide-edge text-sm">
           <div className="flex flex-wrap items-center justify-between py-2.5">
-            <span className="text-muted">Subscriber</span>
+            <span className="text-muted">{tr("Subscriber")}</span>
             <div className="flex items-center gap-2">
               <AddressLink value={mandate.subscriber} />
               {isSubscriber && (
-                <span className="rounded bg-accent/15 px-1.5 py-0.5 text-xs text-accent">You</span>
+                <span className="rounded bg-accent/15 px-1.5 py-0.5 text-xs text-accent">{tr("You")}</span>
               )}
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-between py-2.5">
-            <span className="text-muted">Merchant</span>
+            <span className="text-muted">{tr("Merchant")}</span>
             <div className="flex items-center gap-2">
               <AddressLink value={mandate.merchant} />
               {isMerchant && (
-                <span className="rounded bg-accent/15 px-1.5 py-0.5 text-xs text-accent">You</span>
+                <span className="rounded bg-accent/15 px-1.5 py-0.5 text-xs text-accent">{tr("You")}</span>
               )}
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-between py-2.5">
-            <span className="text-muted">Billing period</span>
+            <span className="text-muted">{tr("Billing period")}</span>
             <span>{formatPeriod(mandate.period)}</span>
           </div>
           <div className="flex flex-wrap items-center justify-between py-2.5">
-            <span className="text-muted">Net to merchant per charge</span>
-            <span>{fromStroops(netAmount, 4, tokenMeta.decimals)} {tokenMeta.symbol}</span>
+            <span className="text-muted">{tr("Net to merchant per charge")}</span>
+            <span>{formatTokenValue(netAmount, 4, tokenMeta.decimals)} {tokenMeta.symbol}</span>
           </div>
           {vaultBalance !== null && (
             <div className="flex flex-wrap items-center justify-between py-2.5">
-              <span className="text-muted">Subscriber vault balance</span>
+              <span className="text-muted">{tr("Subscriber vault balance")}</span>
               <span>{formatAmount(vaultBalance, tokenMeta)}</span>
             </div>
           )}
           {mandate.last_charge > 0 && (
             <div className="flex flex-wrap items-center justify-between py-2.5">
-              <span className="text-muted">Last charge settled</span>
+              <span className="text-muted">{tr("Last charge settled")}</span>
               <span>{formatDate(mandate.last_charge)}</span>
             </div>
           )}
@@ -321,7 +309,7 @@ function MandateDetailsInner() {
                   void runAction("charge", () => payflow.charge(address, signXdr, mandate.id))
                 }
               >
-                {busy === "charge" ? "Charging…" : isDue ? "Charge now" : "Not due yet"}
+                {busy === "charge" ?tr("Charging…") : isDue ?tr("Charge now") :tr("Not due yet")}
               </button>
             )}
 
@@ -339,7 +327,7 @@ function MandateDetailsInner() {
                       )
                     }
                   >
-                    {busy === "pause" ? "Pausing…" : "Pause subscription"}
+                    {busy === "pause" ?tr("Pausing…") :tr("Pause subscription")}
                   </button>
                 )}
 
@@ -354,7 +342,7 @@ function MandateDetailsInner() {
                       )
                     }
                   >
-                    {busy === "resume" ? "Resuming…" : "Resume subscription"}
+                    {busy === "resume" ?tr("Resuming…") :tr("Resume subscription")}
                   </button>
                 )}
 
@@ -364,12 +352,10 @@ function MandateDetailsInner() {
                     className="btn-danger"
                     disabled={busy !== null || networkMismatch}
                     onClick={() => setConfirmCancel(true)}
-                  >
-                    Cancel subscription
-                  </button>
+                  >{tr("Cancel subscription")}</button>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-danger">Confirm cancellation?</span>
+                    <span className="text-xs text-danger">{tr("Confirm cancellation?")}</span>
                     <button
                       type="button"
                       className="btn-danger text-xs py-1"
@@ -378,15 +364,13 @@ function MandateDetailsInner() {
                         void runAction("cancel", () => payflow.cancel(address, signXdr, mandate.id))
                       }
                     >
-                      {busy === "cancel" ? "Cancelling…" : "Yes, cancel"}
+                      {busy === "cancel" ?tr("Cancelling…") :tr("Yes, cancel")}
                     </button>
                     <button
                       type="button"
                       className="btn-ghost text-xs py-1"
                       onClick={() => setConfirmCancel(false)}
-                    >
-                      No
-                    </button>
+                    >{tr("No")}</button>
                   </div>
                 )}
               </>
@@ -406,7 +390,7 @@ function MandateDetailsInner() {
                       )
                     }
                   >
-                    {busy === "pause" ? "Pausing…" : "Pause mandate"}
+                    {busy === "pause" ?tr("Pausing…") :tr("Pause mandate")}
                   </button>
                 )}
 
@@ -421,7 +405,7 @@ function MandateDetailsInner() {
                       )
                     }
                   >
-                    {busy === "resume" ? "Resuming…" : "Resume mandate"}
+                    {busy === "resume" ?tr("Resuming…") :tr("Resume mandate")}
                   </button>
                 )}
 
@@ -431,12 +415,10 @@ function MandateDetailsInner() {
                     className="btn-danger"
                     disabled={busy !== null || networkMismatch}
                     onClick={() => setConfirmEnd(true)}
-                  >
-                    End mandate
-                  </button>
+                  >{tr("End mandate")}</button>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-danger">End this mandate permanently?</span>
+                    <span className="text-xs text-danger">{tr("End this mandate permanently?")}</span>
                     <button
                       type="button"
                       className="btn-danger text-xs py-1"
@@ -447,15 +429,13 @@ function MandateDetailsInner() {
                         )
                       }
                     >
-                      {busy === "end" ? "Ending…" : "Yes, end"}
+                      {busy === "end" ?tr("Ending…") :tr("Yes, end")}
                     </button>
                     <button
                       type="button"
                       className="btn-ghost text-xs py-1"
                       onClick={() => setConfirmEnd(false)}
-                    >
-                      No
-                    </button>
+                    >{tr("No")}</button>
                   </div>
                 )}
               </>
@@ -466,31 +446,25 @@ function MandateDetailsInner() {
 
       {/* Charge history */}
       <Panel
-        title="Charge history"
-        subtitle="Individual charges settled under this mandate"
+        title={tr("Charge history")}
+        subtitle={tr("Individual charges settled under this mandate")}
       >
         {chargesUnavailable ? (
-          <Notice tone="info">
-            Charge history requires the indexer. When running in contract-only mode,
-            individual transaction records are not available; the on-chain counters
-            (charges made: {mandate.charges_made}) are shown above.
-          </Notice>
+          <Notice tone="info">{tr("Charge history requires the indexer. When running in contract-only mode, individual transaction records are not available; the on-chain counters (charges made:")}{" "}{formatNumber(mandate.charges_made)}{tr(") are shown above.")}</Notice>
         ) : charges === null ? (
-          <SkeletonRows rows={2} label="Loading charge history" />
+          <SkeletonRows rows={2} label={tr("Loading charge history")} />
         ) : charges.length === 0 ? (
-          <Empty title="No charges yet">
-            No charges have been settled for this mandate so far.
-          </Empty>
+          <Empty title={tr("No charges yet")}>{tr("No charges have been settled for this mandate so far.")}</Empty>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-edge text-xs uppercase text-muted">
                 <tr>
-                  <th className="py-2 pr-4">Ledger</th>
-                  <th className="py-2 px-4">Charge #</th>
-                  <th className="py-2 px-4">Amount</th>
-                  <th className="py-2 px-4">Fee</th>
-                  <th className="py-2 pl-4">Transaction</th>
+                  <th className="py-2 pr-4">{tr("Ledger")}</th>
+                  <th className="py-2 px-4">{tr("Charge #")}</th>
+                  <th className="py-2 px-4">{tr("Amount")}</th>
+                  <th className="py-2 px-4">{tr("Fee")}</th>
+                  <th className="py-2 pl-4">{tr("Transaction")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-edge">
@@ -500,13 +474,13 @@ function MandateDetailsInner() {
                       #{c.ledger}
                     </td>
                     <td className="py-3 px-4 tabular-nums">
-                      #{c.charges_made}
+                      #{formatNumber(c.charges_made)}
                     </td>
                     <td className="py-3 px-4 font-medium tabular-nums">
-                      {fromStroops(c.amount, 4, tokenMeta.decimals)} {tokenMeta.symbol}
+                      {formatTokenValue(c.amount, 4, tokenMeta.decimals)} {tokenMeta.symbol}
                     </td>
                     <td className="py-3 px-4 text-muted tabular-nums">
-                      {fromStroops(c.fee, 4, tokenMeta.decimals)} {tokenMeta.symbol}
+                      {formatTokenValue(c.fee, 4, tokenMeta.decimals)} {tokenMeta.symbol}
                     </td>
                     <td className="py-3 pl-4">
                       <TxLink hash={c.tx_hash} />
@@ -523,8 +497,9 @@ function MandateDetailsInner() {
 }
 
 export default function MandateDetailsPage() {
+  const { t: tr } = useI18n();
   return (
-    <Suspense fallback={<SkeletonRows rows={4} label="Loading mandate" />}>
+    <Suspense fallback={<SkeletonRows rows={4} label={tr("Loading mandate")} />}>
       <MandateDetailsInner />
     </Suspense>
   );

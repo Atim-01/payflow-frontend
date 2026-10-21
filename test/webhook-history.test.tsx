@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { formatExactTime } from "@/i18n/format";
 import { WebhookDeliveryHistory } from "@/components/WebhookDeliveryHistory";
 
 const mocks = vi.hoisted(() => ({
@@ -40,7 +41,7 @@ describe("webhook history controls", () => {
     expect(screen.getByText("Delivered")).toBeTruthy();
     expect(screen.getAllByText("charge:abc")).toHaveLength(2);
     expect(screen.getByText("503")).toBeTruthy(); expect(screen.getByText("200")).toBeTruthy();
-    expect(screen.getByText(/2026-10-21 .* UTC/)).toBeTruthy();
+    expect(screen.getByText(formatExactTime(failed.retry_at, "en"))).toBeTruthy();
     expect(mocks.sign).toHaveBeenCalledWith(expect.stringContaining('"GA","12"'), "GA");
     expect(mocks.load).toHaveBeenCalledWith("12", expect.objectContaining({ merchant: "GA", signature: "signature" }), expect.any(AbortSignal));
     mocks.load.mockResolvedValueOnce([]); refresh();

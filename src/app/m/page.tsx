@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/i18n/provider";
+
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -8,7 +10,7 @@ import { chainPlansOf, merchantFromParam } from "@/lib/chain";
 import { config } from "@/lib/config";
 import { payflow } from "@/lib/payflow";
 import { useWallet } from "@/lib/wallet";
-import { formatPeriod, fromStroops } from "@/lib/format";
+import{ fromStroops } from "@/lib/format";
 import { metaFor, useTokenMetas } from "@/lib/token";
 import {
   AddressLink,
@@ -36,6 +38,7 @@ import {
  */
 
 function MerchantCatalogue() {
+  const { t: tr, formatPeriod, translateMessage, formatTokenValue } = useI18n();
   const params = useSearchParams();
   const merchant = merchantFromParam(params.get("address"));
   const { address, networkMismatch, signXdr } = useWallet();
@@ -85,11 +88,11 @@ function MerchantCatalogue() {
 
   async function subscribe(plan: ApiPlan) {
     if (!address) {
-      setError("Connect a wallet first.");
+      setError(tr("Connect a wallet first."));
       return;
     }
     if (networkMismatch) {
-      setError("Switch your wallet to the correct network first.");
+      setError(tr("Switch your wallet to the correct network first."));
       return;
     }
     setBusy(plan.id);
@@ -99,7 +102,7 @@ function MerchantCatalogue() {
       const raw = maxCharges[plan.id]?.trim();
       const limit = raw ? Number(raw) : 0;
       if (!Number.isInteger(limit) || limit < 0) {
-        throw new Error("Charge limit must be a whole number, or 0 for open-ended.");
+        throw new Error(tr("Charge limit must be a whole number, or 0 for open-ended."));
       }
       const hash = await payflow.subscribe(address, signXdr, plan.id, limit);
       setDone(hash);
@@ -113,12 +116,8 @@ function MerchantCatalogue() {
 
   if (!merchant) {
     return (
-      <Panel title="Merchant page">
-        <Notice tone="error">
-          This link is missing a merchant address. Share links look like
-          <code className="mx-1">/m/?address=G…</code> — copy yours from the
-          merchant dashboard.
-        </Notice>
+      <Panel title={tr("Merchant page")}>
+        <Notice tone="error">{tr("This link is missing a merchant address. Share links look like")}<code className="mx-1">/m/?address=G…</code>{" "}{tr("— copy yours from the merchant dashboard.")}</Notice>
       </Panel>
     );
   }
@@ -131,44 +130,33 @@ function MerchantCatalogue() {
         <h1 className="text-2xl font-semibold tracking-tight">
           <MerchantAccount value={merchant} />
         </h1>
-        <p className="mt-1 text-sm text-muted">
-          Plans published by this merchant. Subscribing opens a mandate; fund
-          your vault on the{" "}
-          <Link href="/account" className="text-accent hover:underline">
-            account page
-          </Link>{" "}
-          or charges will fail for lack of balance.
-        </p>
+        <p className="mt-1 text-sm text-muted">{tr("Plans published by this merchant. Subscribing opens a mandate; fund your vault on the")}{" "}
+          <Link href="/account" className="text-accent hover:underline">{tr("account page")}</Link>{" "}{tr("or charges will fail for lack of balance.")}</p>
       </div>
 
       {direct && (
-        <Notice tone="info">
-          Reading plans directly from the contract — the indexer is not
-          reachable, so this list may be capped at the merchant&apos;s newest
-          plans.
-        </Notice>
+        <Notice tone="info">{tr("Reading plans directly from the contract — the indexer is not reachable, so this list may be capped at the merchant's newest plans.")}</Notice>
       )}
-      {error && <Notice tone="error">{error}</Notice>}
+      {error && <Notice tone="error">{translateMessage(error)}</Notice>}
       {done && (
-        <Notice tone="ok">
-          Subscribed. Transaction <TxLink hash={done} />
+        <Notice tone="ok">{tr("Subscribed. Transaction")}{" "}<TxLink hash={done} />
         </Notice>
       )}
 
       {plans === null ? (
-        <SkeletonPlanCards label="Loading plans" />
+        <SkeletonPlanCards label={tr("Loading plans")} />
       ) : active.length === 0 ? (
-        <Empty>This merchant has no active plans right now.</Empty>
+        <Empty>{tr("This merchant has no active plans right now.")}</Empty>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {active.map((plan) => {
             const meta = metaFor(metas, plan.token);
             return (
-              <Panel key={plan.id} title={plan.name || `Plan #${plan.id}`}>
+              <Panel key={plan.id} title={plan.name ||tr("Plan #{0}", { "0": plan.id })}>
                 <div className="space-y-3">
                   <div>
                     <div className="text-2xl font-semibold tabular-nums">
-                      {fromStroops(plan.amount, 4, meta.decimals)}{" "}
+                      {formatTokenValue(plan.amount, 4, meta.decimals)}{" "}
                       <span className="text-sm font-normal text-muted">
                         {meta.symbol}
                       </span>
@@ -179,14 +167,12 @@ function MerchantCatalogue() {
                   </div>
 
                   <div className="flex items-center justify-between gap-2 text-sm">
-                    <span className="text-muted">Merchant</span>
+                    <span className="text-muted">{tr("Merchant")}</span>
                     <AddressLink value={plan.merchant} />
                   </div>
 
                   <div>
-                    <label className="label" htmlFor={`limit-${plan.id}`}>
-                      Charge limit (0 = open-ended)
-                    </label>
+                    <label className="label" htmlFor={`limit-${plan.id}`}>{tr("Charge limit (0 = open-ended)")}</label>
                     <input
                       id={`limit-${plan.id}`}
                       className="input"
@@ -206,12 +192,12 @@ function MerchantCatalogue() {
                     onClick={() => void subscribe(plan)}
                   >
                     {busy === plan.id
-                      ? "Confirming…"
+                      ?tr("Confirming…")
                       : networkMismatch
-                        ? "Wrong network"
+                        ?tr("Wrong network")
                         : address
-                          ? "Subscribe"
-                          : "Connect wallet to subscribe"}
+                          ?tr("Subscribe")
+                          :tr("Connect wallet to subscribe")}
                   </button>
                 </div>
               </Panel>
@@ -224,8 +210,9 @@ function MerchantCatalogue() {
 }
 
 export default function MerchantPublicPage() {
+  const { t: tr } = useI18n();
   return (
-    <Suspense fallback={<SkeletonPlanCards label="Loading merchant" />}>
+    <Suspense fallback={<SkeletonPlanCards label={tr("Loading merchant")} />}>
       <MerchantCatalogue />
     </Suspense>
   );

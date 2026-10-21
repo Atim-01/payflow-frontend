@@ -1,18 +1,10 @@
 "use client";
 
+import { useI18n } from "@/i18n/provider";
+
 import { useId, useMemo } from "react";
 import type { TokenMeta } from "@/lib/format";
-import { formatAmount } from "@/lib/format";
-import {
-  bucketTitle,
-  describeSeries,
-  formatBucketLabel,
-  scaleSeries,
-  toPolyline,
-  totalNet,
-  type BucketSize,
-  type RevenuePoint,
-} from "@/lib/revenue";
+import { scaleSeries, toPolyline, totalNet, type BucketSize, type RevenuePoint } from "@/lib/revenue";
 
 /**
  * Net revenue over time, drawn with plain SVG.
@@ -45,12 +37,13 @@ export function RevenueChart({
   size: BucketSize;
   meta: TokenMeta;
 }) {
+  const { formatAmount, t: tr, describeSeries, formatBucketLabel, bucketTitle } = useI18n();
   const tableId = useId();
   const scaled = useMemo(
     () => scaleSeries(points, WIDTH, HEIGHT, PADDING),
     [points],
   );
-  const render = useMemo(() => (value: bigint) => formatAmount(value, meta), [meta]);
+  const render = useMemo(() => (value: bigint) => formatAmount(value, meta), [meta, formatAmount]);
   const summary = describeSeries(points, size, render);
   const allZero = points.length > 0 && totalNet(points) === 0n;
 
@@ -100,33 +93,22 @@ export function RevenueChart({
       )}
 
       {allZero && (
-        <p className="text-sm text-muted">
-          No charges settled in this period, so there is nothing to plot. The table below
-          still lists every bucket.
-        </p>
+        <p className="text-sm text-muted">{tr("No charges settled in this period, so there is nothing to plot. The table below still lists every bucket.")}</p>
       )}
 
       <details className="text-sm">
-        <summary className="cursor-pointer text-muted hover:text-fg">
-          Show revenue as a table
-        </summary>
+        <summary className="cursor-pointer text-muted hover:text-fg">{tr("Show revenue as a table")}</summary>
         <div className="mt-3 overflow-x-auto" id={tableId}>
           <table className="w-full text-left text-sm">
             <caption className="sr-only">{summary}</caption>
             <thead>
               <tr className="border-b border-edge text-xs uppercase tracking-wide text-muted">
                 <th scope="col" className="py-1.5 pr-3 font-medium">
-                  {size === "week" ? "Week of" : "Day"}
+                  {size === "week" ?tr("Week of") :tr("Day")}
                 </th>
-                <th scope="col" className="py-1.5 pr-3 text-right font-medium">
-                  Charged
-                </th>
-                <th scope="col" className="py-1.5 pr-3 text-right font-medium">
-                  Fee
-                </th>
-                <th scope="col" className="py-1.5 text-right font-medium">
-                  You received
-                </th>
+                <th scope="col" className="py-1.5 pr-3 text-right font-medium">{tr("Charged")}</th>
+                <th scope="col" className="py-1.5 pr-3 text-right font-medium">{tr("Fee")}</th>
+                <th scope="col" className="py-1.5 text-right font-medium">{tr("You received")}</th>
               </tr>
             </thead>
             <tbody className="tabular-nums">
@@ -143,9 +125,7 @@ export function RevenueChart({
             </tbody>
             <tfoot>
               <tr className="border-t border-edge font-medium">
-                <th scope="row" className="py-1.5 pr-3 text-left font-medium">
-                  Total
-                </th>
+                <th scope="row" className="py-1.5 pr-3 text-left font-medium">{tr("Total")}</th>
                 <td className="sr-only" colSpan={2} />
                 <td className="py-1.5 text-right">{render(totalNet(points))}</td>
               </tr>

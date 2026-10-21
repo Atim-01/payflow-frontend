@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/i18n/provider";
+
 import { notFound } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -9,7 +11,7 @@ import { planAvailability } from "@/lib/availability";
 import { config } from "@/lib/config";
 import { payflow } from "@/lib/payflow";
 import { useWallet } from "@/lib/wallet";
-import { formatPeriod, fromStroops } from "@/lib/format";
+import{ fromStroops } from "@/lib/format";
 import { AddressLink, Badge, Empty, Notice, Panel, TxLink } from "@/components/ui";
 
 type ChargeRow = PlanCharge;
@@ -19,6 +21,7 @@ interface PlanPageClientProps {
 }
 
 export function PlanPageClient({ planId }: PlanPageClientProps) {
+  const { t: tr, formatPeriod, translateMessage, formatTokenValue } = useI18n();
   const { address, networkMismatch, signXdr } = useWallet();
   const wanted = Number(planId);
   const [plan, setPlan] = useState<ApiPlan | null>(null);
@@ -101,8 +104,8 @@ export function PlanPageClient({ planId }: PlanPageClientProps) {
 
   if (loading) {
     return (
-      <Panel title="Plan">
-        <Empty>Loading plan…</Empty>
+      <Panel title={tr("Plan")}>
+        <Empty>{tr("Loading plan…")}</Empty>
       </Panel>
     );
   }
@@ -120,11 +123,11 @@ export function PlanPageClient({ planId }: PlanPageClientProps) {
 
   async function subscribe() {
     if (!address) {
-      setError("Connect a wallet first.");
+      setError(tr("Connect a wallet first."));
       return;
     }
     if (networkMismatch) {
-      setError("Switch your wallet to the correct network first.");
+      setError(tr("Switch your wallet to the correct network first."));
       return;
     }
     const blocked = unavailable || planAvailability(plan ?? {}).reason;
@@ -134,7 +137,7 @@ export function PlanPageClient({ planId }: PlanPageClientProps) {
     }
     const limit = Number(maxCharges?.trim()) || 0;
     if (!Number.isInteger(limit) || limit < 0) {
-      setError("Charge limit must be a whole number, or 0 for open-ended.");
+      setError(tr("Charge limit must be a whole number, or 0 for open-ended."));
       return;
     }
     setBusy(true);
@@ -144,11 +147,11 @@ export function PlanPageClient({ planId }: PlanPageClientProps) {
       const res = await api.plans();
       const plans = res ? res.plans : await chainPlans(address);
       const latest = plans.find((p) => p.id === subscribePlanId);
-      if (!latest || latest.active !== 1) throw new Error("This plan is no longer available.");
+      if (!latest || latest.active !== 1) throw new Error(tr("This plan is no longer available."));
       setPlan(latest);
       const check = () => {
         if (walletState.current.address !== address || walletState.current.networkMismatch) {
-          throw new Error("Wallet changed. Check your wallet and try again.");
+          throw new Error(tr("Wallet changed. Check your wallet and try again."));
         }
         const reason = planAvailability(latest).reason;
         if (reason) throw new Error(reason);
@@ -170,55 +173,50 @@ export function PlanPageClient({ planId }: PlanPageClientProps) {
   return (
     <div className="space-y-6">
       {direct && (
-        <Notice tone="info">
-          Reading this plan directly from the contract — the indexer is not
-          reachable, so charge history may be incomplete.
-        </Notice>
+        <Notice tone="info">{tr("Reading this plan directly from the contract — the indexer is not reachable, so charge history may be incomplete.")}</Notice>
       )}
-      {error && <Notice tone="error">{error}</Notice>}
+      {error && <Notice tone="error">{translateMessage(error)}</Notice>}
       {done && (
-        <Notice tone="ok">
-          Subscribed. Transaction <TxLink hash={done} />
+        <Notice tone="ok">{tr("Subscribed. Transaction")}{" "}<TxLink hash={done} />
         </Notice>
       )}
 
-      <Panel title={plan.name || `Plan #${plan.id}`}>
+      <Panel title={plan.name ||tr("Plan #{0}", { "0": plan.id })}>
         <div className="grid gap-4 sm:grid-cols-3">
           <div>
-            <label className="label">Price</label>
+            <label className="label">{tr("Price")}</label>
             <div className="text-2xl font-semibold tabular-nums">
-              {fromStroops(plan.amount)} XLM
-            </div>
+              {formatTokenValue(plan.amount)}{" "}{tr("XLM")}</div>
           </div>
           <div>
-            <label className="label">Billing period</label>
+            <label className="label">{tr("Billing period")}</label>
             <div className="text-sm text-muted">{formatPeriod(plan.period)}</div>
           </div>
           <div>
-            <label className="label">Merchant</label>
+            <label className="label">{tr("Merchant")}</label>
             <AddressLink value={plan.merchant} />
           </div>
           <div>
-            <label className="label">Status</label>
+            <label className="label">{tr("Status")}</label>
             <Badge status={plan.active === 1 ? "Active" : "Paused"} />
           </div>
         </div>
       </Panel>
 
-      <Panel title="Recent charges">
+      <Panel title={tr("Recent charges")}>
         {charges.length === 0 ? (
-          <Empty>No charges settled against this plan yet.</Empty>
+          <Empty>{tr("No charges settled against this plan yet.")}</Empty>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr>
-                  <th className="text-muted text-left">Mandate</th>
-                  <th className="text-muted text-left">Subscriber</th>
-                  <th className="text-muted text-right">Amount</th>
-                  <th className="text-muted text-right">Fee</th>
-                  <th className="text-muted text-right">Net</th>
-                  <th className="text-muted text-left">Tx hash</th>
+                  <th className="text-muted text-left">{tr("Mandate")}</th>
+                  <th className="text-muted text-left">{tr("Subscriber")}</th>
+                  <th className="text-muted text-right">{tr("Amount")}</th>
+                  <th className="text-muted text-right">{tr("Fee")}</th>
+                  <th className="text-muted text-right">{tr("Net")}</th>
+                  <th className="text-muted text-left">{tr("Tx hash")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -228,9 +226,9 @@ export function PlanPageClient({ planId }: PlanPageClientProps) {
                     <td className="py-2">
                       <AddressLink value={c.subscriber} />
                     </td>
-                    <td className="py-2 text-right">{c.amount} XLM</td>
-                    <td className="py-2 text-right">{c.fee} XLM</td>
-                    <td className="py-2 text-right">{c.net} XLM</td>
+                    <td className="py-2 text-right">{c.amount}{" "}{tr("XLM")}</td>
+                    <td className="py-2 text-right">{c.fee}{" "}{tr("XLM")}</td>
+                    <td className="py-2 text-right">{c.net}{" "}{tr("XLM")}</td>
                     <td className="py-2 text-right">
                       <TxLink hash={c.txHash} />
                     </td>
@@ -242,20 +240,13 @@ export function PlanPageClient({ planId }: PlanPageClientProps) {
         )}
       </Panel>
 
-      <Panel title="Subscribe to this plan">
-        <p className="text-sm text-muted">
-          Open a mandate against this plan. Fund your vault on the{" "}
-          <Link href="/account" className="text-accent hover:underline">
-            account page
-          </Link>{" "}
-          first, or charges will fail for lack of balance.
-        </p>
+      <Panel title={tr("Subscribe to this plan")}>
+        <p className="text-sm text-muted">{tr("Open a mandate against this plan. Fund your vault on the")}{" "}
+          <Link href="/account" className="text-accent hover:underline">{tr("account page")}</Link>{" "}{tr("first, or charges will fail for lack of balance.")}</p>
         {unavailable && <p id="plan-availability" className="text-sm text-muted">{unavailable}</p>}
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[12rem] flex-1">
-            <label className="label" htmlFor="plan-charge-limit">
-              Charge limit (0 = open-ended)
-            </label>
+            <label className="label" htmlFor="plan-charge-limit">{tr("Charge limit (0 = open-ended)")}</label>
             <input
               id="plan-charge-limit"
               className="input"
@@ -273,12 +264,12 @@ export function PlanPageClient({ planId }: PlanPageClientProps) {
             onClick={() => void subscribe()}
           >
             {busy
-              ? "Confirming…"
+              ?tr("Confirming…")
               : networkMismatch
-                ? "Wrong network"
+                ?tr("Wrong network")
                 : address
-                  ? "Subscribe"
-                  : "Connect wallet"}
+                  ?tr("Subscribe")
+                  :tr("Connect wallet")}
           </button>
         </div>
       </Panel>
