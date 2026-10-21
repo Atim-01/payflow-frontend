@@ -902,34 +902,44 @@ export default function MerchantPage() {
     setMandates(rows);
 
     // Load unpaid mandates
-    const unpaidResponse = await api.unpaidMandates(address);
-    if (unpaidResponse && unpaidResponse.unpaid) {
-      // Backend provided unpaid list, convert to UnpaidMandate format
-      const now = Math.floor(Date.now() / 1000);
-      const unpaidList: UnpaidMandate[] = await Promise.all(
-        unpaidResponse.unpaid.map(async (mandate) => {
-          try {
-            const amount = BigInt(mandate.amount);
-            const balance = await payflow.vaultBalance(address, mandate.subscriber, mandate.token ?? config.contracts.token);
-            const shortfall = balance !== null && amount > balance ? amount - balance : 0n;
-            return {
-              mandate,
-              shortfall,
-              overdueDuration: now - mandate.next_charge,
-            };
-          } catch {
-            // If vault balance read fails, estimate from mandate being in unpaid list
-            return {
-              mandate,
-              shortfall: BigInt(mandate.amount),
-              overdueDuration: now - mandate.next_charge,
-            };
-          }
-        })
-      );
-      setUnpaidMandates(unpaidList.filter(u => u.shortfall > 0n));
-    } else {
-      // Fallback to contract-only mode
+    try {
+      const unpaidResponse = await api.unpaidMandates(address);
+      if (unpaidResponse && unpaidResponse.unpaid) {
+        // Backend provided unpaid list, convert to UnpaidMandate format
+        const now = Math.floor(Date.now() / 1000);
+        const unpaidList: UnpaidMandate[] = await Promise.all(
+          unpaidResponse.unpaid.map(async (mandate) => {
+            try {
+              const amount = BigInt(mandate.amount);
+              const balance = await payflow.vaultBalance(address, mandate.subscriber, mandate.token ?? config.contracts.token);
+              const shortfall = balance !== null && amount > balance ? amount - balance : 0n;
+              return {
+                mandate,
+                shortfall,
+                overdueDuration: now - mandate.next_charge,
+              };
+            } catch {
+              // If vault balance read fails, estimate from mandate being in unpaid list
+              return {
+                mandate,
+                shortfall: BigInt(mandate.amount),
+                overdueDuration: now - mandate.next_charge,
+              };
+            }
+          })
+        );
+        setUnpaidMandates(unpaidList.filter(u => u.shortfall > 0n));
+      } else {
+        // Fallback to contract-only mode
+        try {
+          const unpaidList = await chainUnpaidMandates(address, address);
+          setUnpaidMandates(unpaidList);
+        } catch {
+          setUnpaidMandates([]);
+        }
+      }
+    } catch {
+      // API method doesn't exist or failed - fallback to contract-only mode
       try {
         const unpaidList = await chainUnpaidMandates(address, address);
         setUnpaidMandates(unpaidList);
