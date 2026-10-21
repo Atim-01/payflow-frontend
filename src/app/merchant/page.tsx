@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { api, checkWebhookUrl, type ApiMandate, type ApiPlan, type ApiWebhook, type MerchantSummary, type StreamEvent } from "@/lib/api";
+import { api, checkWebhookUrl, type ApiChargeAttempt, type ApiMandate, type ApiPlan, type ApiWebhook, type MerchantSummary, type StreamEvent } from "@/lib/api";
 import { RevenueChart } from "@/components/RevenueChart";
 import { WebhookDeliveryHistory } from "@/components/WebhookDeliveryHistory";
 import { buildCsv, downloadCsv, exportFilename, type ChargeRow } from "@/lib/csv";
@@ -38,7 +38,7 @@ import {
   remainingDiscountCharges,
   supportsDiscounts,
 } from "@/lib/discount";
-import { MAX_NAME_LEN, mandatePauseUntil, mandateRefundableAmount, mandateSupportsRefund, nameByteLength, payflow, server } from "@/lib/payflow";
+import { MAX_NAME_LEN, mandatePauseUntil, mandateRefundableAmount, mandateSupportsRefund, nameByteLength, payflow, server, decodeContractError } from "@/lib/payflow";
 import { useWallet } from "@/lib/wallet";
 import { useStream } from "@/lib/stream";
 import {
@@ -98,6 +98,119 @@ function FeePreview({
       {formatAmount(split.fee, meta)} ({formatFeeBps(feeBps)}) · you receive{" "}
       {formatAmount(split.net, meta)}.
     </span>
+  );
+}
+
+/**
+ * Charge attempt history for a mandate, proposed by payflow-backend#144.
+ *
+ * Shows every attempt to settle a charge, including failures with decoded error
+ * messages. Hidden entirely when the backend does not serve the endpoint or
+ * when the mandate has no attempts recorded.
+ */
+function ChargeAttemptsHistory({
+  mandateId,
+  apiConfigured,
+}: {
+  mandateId: number;
+  apiConfigured: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [attempts, setAttempts] = useState<ApiChargeAttempt[] | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!apiConfigured || !expanded) {
+      return;
+    }
+    setLoading(true);
+    let live = true;
+    void api.chargeAttempts(mandateId).then((data) => {
+      if (live) {
+        setAttempts(data);
+        setLoading(false);
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, [apiConfigured, mandateId, expanded]);
+
+  if (!apiConfigured) {
+    return null;
+  }
+
+  // Decode an error code into a plain-language message using the existing
+  // contract error decoder. The backend may already provide a message, but
+  // if it only stored the code, we reconstruct the reason here.
+  function decodeAttemptError(attempt: ApiChargeAttempt): string {
+    if (attempt.error_message) {
+      return attempt.error_message;
+    }
+    if (attempt.error_code !== null) {
+      // Construct an error that matches what decodeContractError expects
+      const err = new Error(`HostError: Error(Contract, #${attempt.error_code})`);
+      return decodeContractError(err, "charge");
+    }
+    return "Charge failed for an unknown reason.";
+  }
+
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        className="flex items-center gap-2 text-sm font-medium text-muted hover:text-foreground"
+        onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
+        aria-controls={`attempts-${mandateId}`}
+      >
+        {expanded ? "▼" : "▶"} Charge attempt history
+      </button>
+      {expanded && (
+        <div id={`attempts-${mandateId}`} className="mt-2 rounded-lg border border-edge p-3">
+          {loading ? (
+            <p className="text-sm text-muted">Loading charge attempts…</p>
+          ) : attempts === null ? (
+            <Notice tone="info">
+              Charge attempt history is not available. The backend does not serve this endpoint yet,
+              or the feature has not been deployed to this network.
+            </Notice>
+          ) : attempts.length === 0 ? (
+            <p className="text-sm text-muted">No charge attempts recorded for this mandate.</p>
+          ) : (
+            <div className="space-y-2">
+              {attempts.map((attempt) => (
+                <div
+                  key={attempt.id}
+                  className="rounded border border-edge p-2 text-sm"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted">
+                        {formatDate(attempt.attempted_at)}
+                      </span>
+                      {attempt.result === "success" ? (
+                        <Badge status="Active" />
+                      ) : (
+                        <span className="rounded-full bg-danger/15 px-2 py-0.5 text-xs font-medium text-danger">
+                          Failed
+                        </span>
+                      )}
+                    </div>
+                    {attempt.tx_hash && (
+                      <TxLink hash={attempt.tx_hash} />
+                    )}
+                  </div>
+                  {attempt.result === "failed" && (
+                    <p className="mt-1 text-xs text-danger">{decodeAttemptError(attempt)}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -2042,6 +2155,10 @@ export default function MerchantPage() {
                       }
                     />
                   )}
+                  <ChargeAttemptsHistory
+                    mandateId={m.id}
+                    apiConfigured={api.isConfigured()}
+                  />
                 </div>
               );
             }}
