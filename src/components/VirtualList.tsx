@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/i18n/provider";
+
 import React, {
   useCallback,
   useEffect,
@@ -45,6 +47,7 @@ export function VirtualList<T>({
   className = "space-y-3",
   listAriaLabel = "List",
 }: VirtualListProps<T>) {
+  const { t: tr } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(containerMaxHeight);
@@ -105,7 +108,7 @@ export function VirtualList<T>({
       <div
         className={className}
         role="region"
-        aria-label={listAriaLabel}
+        aria-label={tr(listAriaLabel)}
       >
         {items.map((item, index) => (
           <div
@@ -143,15 +146,13 @@ export function VirtualList<T>({
       className={`relative overflow-y-auto outline-none focus:ring-1 focus:ring-accent/40 rounded-lg ${className}`}
       style={{ maxHeight: containerMaxHeight }}
       role="feed"
-      aria-label={listAriaLabel}
+      aria-label={tr(listAriaLabel)}
       tabIndex={0}
       onScroll={handleScroll}
       onFocusCapture={handleFocusCapture}
       onBlurCapture={handleBlurCapture}
     >
-      <div className="sr-only" aria-live="polite">
-        Showing {totalCount} items in {listAriaLabel}. Scroll or tab through entries.
-      </div>
+      <div className="sr-only" aria-live="polite">{tr("Showing")}{" "}{totalCount}{" "}{tr("items in")}{" "}{listAriaLabel}{tr(". Scroll or tab through entries.")}</div>
 
       {topPadding > 0 && (
         <div

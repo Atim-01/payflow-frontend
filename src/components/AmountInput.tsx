@@ -1,7 +1,9 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { amountError, normaliseAmountInput } from "@/lib/format";
+import { useI18n } from "@/i18n/provider";
+
+import { useEffect, useRef, type ReactNode } from "react";
+import { canonicalAmount, normaliseAmountInput } from "@/lib/format";
 
 /**
  * A decimal amount field for money.
@@ -51,6 +53,18 @@ export function AmountInput({
   describedBy?: string;
   onBlur?: () => void;
 }) {
+  const { locale, amountError, t: tr, translateMessage } = useI18n();
+  const previousLocale = useRef(locale);
+  useEffect(() => {
+    if (previousLocale.current === locale) return;
+    const canonical = canonicalAmount(value, previousLocale.current);
+    previousLocale.current = locale;
+    // Keep the exact amount while changing its decimal mark. Do not alter invalid drafts.
+    if (canonical !== null) {
+      const next = locale === "fr" ? canonical.replace(".", ",") : canonical;
+      if (next !== value) onChange(next);
+    }
+  }, [locale, value, onChange]);
   const errorId = `${id}-error`;
   const hintId = `${id}-hint`;
   const message = amountError(value, decimals);
@@ -65,7 +79,7 @@ export function AmountInput({
   return (
     <div>
       <label className="label" htmlFor={id}>
-        {label}
+        {typeof label === "string" ? tr(label) : label}
       </label>
       <input
         id={id}
@@ -82,12 +96,12 @@ export function AmountInput({
       />
       {hint && (
         <p id={hintId} className="mt-1 text-xs text-muted">
-          {hint}
+          {typeof hint === "string" ? tr(hint) : hint}
         </p>
       )}
       {!hideError && message && (
         <p id={errorId} className="mt-1 text-sm text-danger">
-          {message}
+          {translateMessage(message)}
         </p>
       )}
     </div>

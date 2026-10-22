@@ -1,5 +1,8 @@
 "use client";
 
+import { useI18n } from "@/i18n/provider";
+import type { Translation } from "@/i18n/translate";
+
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -8,15 +11,8 @@ import { chainPlans } from "@/lib/chain";
 import { config } from "@/lib/config";
 import { payflow } from "@/lib/payflow";
 import { useWallet } from "@/lib/wallet";
-import {
-  formatAmount,
-  formatDate,
-  formatWhen,
-  formatPeriod,
-  fromStroops,
-  type TokenMeta,
-} from "@/lib/format";
-import { formatTrialLength, trialBadge, trialSeconds } from "@/lib/trial";
+import{ fromStroops, type TokenMeta } from "@/lib/format";
+import { trialSeconds } from "@/lib/trial";
 import { availabilityInteger, planAvailability } from "@/lib/availability";
 import {
   COMPARE_LIMIT,
@@ -30,14 +26,14 @@ import { formatUsdEstimate, formatUsdcEstimate, useXlmUsdPrice } from "@/lib/pri
 import { Empty, MerchantAccount, Notice, Panel, SkeletonPlanCards, TxLink } from "@/components/ui";
 
 /** Remaining seats in words, without inventing a count the source cannot provide. */
-function seatsLabel(plan: ApiPlan, now: number): string {
+function seatsLabel(plan: ApiPlan, now: number, tr: Translation): string {
   const availability = planAvailability(plan, now);
   if (availability.seats !== null) {
-    return `${availability.seats} ${availability.seats === 1 ? "seat" : "seats"} left`;
+    return tr(availability.seats === 1 ? "{0} seat left" : "{0} seats left", { 0: availability.seats });
   }
   const cap = availabilityInteger(plan.max_subscribers);
-  if (cap && cap > 0) return "Count unavailable";
-  return "Unlimited";
+  if (cap && cap > 0) return tr("Count unavailable");
+  return tr("Unlimited");
 }
 
 /**
@@ -56,48 +52,41 @@ function ComparisonTable({
   metas: Map<string, TokenMeta>;
   now: number;
 }) {
+  const { t: tr, formatPeriod, formatAmount, formatTokenValue, formatTrialLength, formatNumber } = useI18n();
   return (
     <div
       className="mt-3 overflow-x-auto rounded-lg border border-edge"
       tabIndex={0}
       role="region"
-      aria-label="Plan comparison, scroll horizontally if needed"
+      aria-label={tr("Plan comparison, scroll horizontally if needed")}
     >
       <table className="w-full min-w-[34rem] border-collapse text-sm">
-        <caption className="sr-only">
-          Side-by-side comparison of {plans.length} selected plans
-        </caption>
+        <caption className="sr-only">{tr("Side-by-side comparison of")}{" "}{formatNumber(plans.length)}{" "}{tr("selected plans")}</caption>
         <thead>
           <tr className="border-b border-edge bg-fg/5">
-            <th scope="col" className="px-3 py-2 text-left font-medium text-muted">
-              Feature
-            </th>
+            <th scope="col" className="px-3 py-2 text-left font-medium text-muted">{tr("Feature")}</th>
             {plans.map((plan) => (
               <th key={plan.id} scope="col" className="px-3 py-2 text-left font-semibold">
-                {plan.name || `Plan #${plan.id}`}
+                {plan.name ||tr("Plan #{0}", { "0": plan.id })}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
           <tr className="border-b border-edge/60">
-            <th scope="row" className="px-3 py-2 text-left font-medium text-muted">
-              Price
-            </th>
+            <th scope="row" className="px-3 py-2 text-left font-medium text-muted">{tr("Price")}</th>
             {plans.map((plan) => {
               const meta = metaFor(metas, plan.token);
               return (
                 <td key={plan.id} className="px-3 py-2 tabular-nums">
-                  {fromStroops(plan.amount, 4, meta.decimals)}{" "}
+                  {formatTokenValue(plan.amount, 4, meta.decimals)}{" "}
                   <span className="text-xs text-muted">{meta.symbol}</span>
                 </td>
               );
             })}
           </tr>
           <tr className="border-b border-edge/60">
-            <th scope="row" className="px-3 py-2 text-left font-medium text-muted">
-              Billing period
-            </th>
+            <th scope="row" className="px-3 py-2 text-left font-medium text-muted">{tr("Billing period")}</th>
             {plans.map((plan) => (
               <td key={plan.id} className="px-3 py-2">
                 {formatPeriod(plan.period)}
@@ -105,9 +94,7 @@ function ComparisonTable({
             ))}
           </tr>
           <tr className="border-b border-edge/60">
-            <th scope="row" className="px-3 py-2 text-left font-medium text-muted">
-              Monthly equivalent
-              <span className="block text-xs font-normal">30-day month</span>
+            <th scope="row" className="px-3 py-2 text-left font-medium text-muted">{tr("Monthly equivalent")}<span className="block text-xs font-normal">{tr("30-day month")}</span>
             </th>
             {plans.map((plan) => {
               const meta = metaFor(metas, plan.token);
@@ -120,36 +107,30 @@ function ComparisonTable({
             })}
           </tr>
           <tr className="border-b border-edge/60">
-            <th scope="row" className="px-3 py-2 text-left font-medium text-muted">
-              Free trial
-            </th>
+            <th scope="row" className="px-3 py-2 text-left font-medium text-muted">{tr("Free trial")}</th>
             {plans.map((plan) => {
               const trial = trialSeconds(plan);
               return (
                 <td key={plan.id} className="px-3 py-2">
                   {plan.trial === undefined
-                    ? "Not reported"
+                    ?tr("Not reported")
                     : trial > 0
                       ? formatTrialLength(trial)
-                      : "None"}
+                      :tr("None")}
                 </td>
               );
             })}
           </tr>
           <tr className="border-b border-edge/60">
-            <th scope="row" className="px-3 py-2 text-left font-medium text-muted">
-              Seats
-            </th>
+            <th scope="row" className="px-3 py-2 text-left font-medium text-muted">{tr("Seats")}</th>
             {plans.map((plan) => (
               <td key={plan.id} className="px-3 py-2">
-                {seatsLabel(plan, now)}
+                {seatsLabel(plan, now, tr)}
               </td>
             ))}
           </tr>
           <tr>
-            <th scope="row" className="px-3 py-2 text-left font-medium text-muted">
-              Merchant
-            </th>
+            <th scope="row" className="px-3 py-2 text-left font-medium text-muted">{tr("Merchant")}</th>
             {plans.map((plan) => (
               <td key={plan.id} className="px-3 py-2">
                 <MerchantAccount value={plan.merchant} />
@@ -163,6 +144,7 @@ function ComparisonTable({
 }
 
 function SubscribeInner() {
+  const { t: tr, formatPeriod, formatDate, formatWhen, translateMessage, formatTrialLength, trialBadge, formatTokenValue, formatUsdString, formatNumber } = useI18n();
   const searchParams = useSearchParams();
   const sortParam = (searchParams?.get("sort") as PlanSortOption) || "newest";
   const periodParam = (searchParams?.get("period") as PlanPeriodOption) || "all";
@@ -255,11 +237,11 @@ function SubscribeInner() {
 
   async function subscribe(plan: ApiPlan) {
     if (!address) {
-      setError("Connect a wallet first.");
+      setError(tr("Connect a wallet first."));
       return;
     }
     if (networkMismatch) {
-      setError("Switch your wallet to the correct network first.");
+      setError(tr("Switch your wallet to the correct network first."));
       return;
     }
     const blocked = planAvailability(plan).reason;
@@ -274,20 +256,20 @@ function SubscribeInner() {
       const raw = maxCharges[plan.id]?.trim();
       const limit = raw ? Number(raw) : 0;
       if (!Number.isInteger(limit) || limit < 0) {
-        throw new Error("Charge limit must be a whole number, or 0 for open-ended.");
+        throw new Error(tr("Charge limit must be a whole number, or 0 for open-ended."));
       }
       const latest = (await load()).find((p) => p.id === plan.id);
       if (walletState.current.address !== address || walletState.current.networkMismatch) {
-        throw new Error("Wallet changed. Check your wallet and try again.");
+        throw new Error(tr("Wallet changed. Check your wallet and try again."));
       }
-      if (!latest || latest.active !== 1) throw new Error("This plan is no longer available.");
+      if (!latest || latest.active !== 1) throw new Error(tr("This plan is no longer available."));
       const reason = planAvailability(latest).reason;
       if (reason) throw new Error(reason);
       const hash = await payflow.subscribe(
         address,
         async (xdr) => {
           if (walletState.current.address !== address || walletState.current.networkMismatch) {
-            throw new Error("Wallet changed. Check your wallet and try again.");
+            throw new Error(tr("Wallet changed. Check your wallet and try again."));
           }
           const closed = planAvailability(latest).reason;
           if (closed) throw new Error(closed);
@@ -343,66 +325,42 @@ function SubscribeInner() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Available plans</h1>
-        <p className="mt-1 text-sm text-muted">
-          Subscribing opens a mandate. Fund your vault on the{" "}
-          <Link href="/account" className="text-accent hover:underline">
-            account page
-          </Link>{" "}
-          or charges will fail for lack of balance.
-        </p>
+        <h1 className="text-2xl font-semibold tracking-tight">{tr("Available plans")}</h1>
+        <p className="mt-1 text-sm text-muted">{tr("Subscribing opens a mandate. Fund your vault on the")}{" "}
+          <Link href="/account" className="text-accent hover:underline">{tr("account page")}</Link>{" "}{tr("or charges will fail for lack of balance.")}</p>
       </div>
 
       {direct && (
-        <Notice tone="info">
-          Reading plans directly from the contract — the indexer is not
-          reachable, so this list is capped at the first 24 plans.
-        </Notice>
+        <Notice tone="info">{tr("Reading plans directly from the contract — the indexer is not reachable, so this list is capped at the first 24 plans.")}</Notice>
       )}
-      {error && <Notice tone="error">{error}</Notice>}
+      {error && <Notice tone="error">{translateMessage(error)}</Notice>}
       {done && (
-        <Notice tone="ok">
-          Subscribed. Transaction <TxLink hash={done} />
+        <Notice tone="ok">{tr("Subscribed. Transaction")}{" "}<TxLink hash={done} />
           {doneTrial && (
             <>
               {" "}
-              {doneTrial.plan} has a {formatTrialLength(doneTrial.seconds)} free trial, so your
-              first charge is due {formatTrialLength(doneTrial.seconds)} from now — nothing is
-              taken before then, and cancelling before then costs nothing.
-            </>
+              {doneTrial.plan}{" "}{tr("has a")}{" "}{formatTrialLength(doneTrial.seconds)}{" "}{tr("free trial, so your first charge is due")}{" "}{formatTrialLength(doneTrial.seconds)}{" "}{tr("from now — nothing is taken before then, and cancelling before then costs nothing.")}</>
           )}
         </Notice>
       )}
 
       {plans === null ? (
-        <SkeletonPlanCards label="Loading plans" />
+        <SkeletonPlanCards label={tr("Loading plans")} />
       ) : active.length === 0 ? (
         (plans ?? []).length === 0 ? (
           <Empty
-            title="No plans yet"
+            title={tr("No plans yet")}
             action={
-              <Link href="/merchant" className="btn-primary">
-                Publish a plan
-              </Link>
+              <Link href="/merchant" className="btn-primary">{tr("Publish a plan")}</Link>
             }
-          >
-            Nothing has been published on this deployment yet. Publish a plan
-            from the merchant page — it is written straight to the contract, so
-            it appears here with or without the indexer.
-          </Empty>
+          >{tr("Nothing has been published on this deployment yet. Publish a plan from the merchant page — it is written straight to the contract, so it appears here with or without the indexer.")}</Empty>
         ) : (
           <Empty
-            title="No active plans right now"
+            title={tr("No active plans right now")}
             action={
-              <Link href="/merchant" className="btn-primary">
-                Publish a plan
-              </Link>
+              <Link href="/merchant" className="btn-primary">{tr("Publish a plan")}</Link>
             }
-          >
-            Every plan on this list is deactivated, so there is nothing to
-            subscribe to at the moment. Check back later, or publish your own
-            plan from the merchant page.
-          </Empty>
+          >{tr("Every plan on this list is deactivated, so there is nothing to subscribe to at the moment. Check back later, or publish your own plan from the merchant page.")}</Empty>
         )
       ) : (
         <div className="space-y-4">
@@ -410,56 +368,49 @@ function SubscribeInner() {
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-edge bg-surface/50 p-3">
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-2">
-                <label htmlFor="period-filter" className="text-sm font-medium text-muted">
-                  Billing period:
-                </label>
+                <label htmlFor="period-filter" className="text-sm font-medium text-muted">{tr("Billing period:")}</label>
                 <select
                   id="period-filter"
                   className="input py-1 px-2.5 text-sm"
                   value={period}
                   onChange={(e) => updateParams(sort, e.target.value as PlanPeriodOption)}
                 >
-                  <option value="all">All periods</option>
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                  <option value="yearly">Annual</option>
+                  <option value="all">{tr("All periods")}</option>
+                  <option value="daily">{tr("Daily")}</option>
+                  <option value="weekly">{tr("Weekly")}</option>
+                  <option value="monthly">{tr("Monthly")}</option>
+                  <option value="yearly">{tr("Annual")}</option>
                 </select>
               </div>
 
               <div className="flex items-center gap-2">
-                <label htmlFor="sort-select" className="text-sm font-medium text-muted">
-                  Sort by:
-                </label>
+                <label htmlFor="sort-select" className="text-sm font-medium text-muted">{tr("Sort by:")}</label>
                 <select
                   id="sort-select"
                   className="input py-1 px-2.5 text-sm"
                   value={sort}
                   onChange={(e) => updateParams(e.target.value as PlanSortOption, period)}
                 >
-                  <option value="newest">Newest first</option>
-                  <option value="price_asc">Price: Low to High</option>
-                  <option value="price_desc">Price: High to Low</option>
-                  <option value="period_asc">Period: Short to Long</option>
-                  <option value="period_desc">Period: Long to Short</option>
+                  <option value="newest">{tr("Newest first")}</option>
+                  <option value="price_asc">{tr("Price: Low to High")}</option>
+                  <option value="price_desc">{tr("Price: High to Low")}</option>
+                  <option value="period_asc">{tr("Period: Short to Long")}</option>
+                  <option value="period_desc">{tr("Period: Long to Short")}</option>
                 </select>
               </div>
             </div>
 
-            <span className="text-xs text-muted" aria-live="polite">
-              Showing {filteredPlans.length} of {active.length} plans
-            </span>
+            <span className="text-xs text-muted" aria-live="polite">{tr("Showing")}{" "}{formatNumber(filteredPlans.length)}{" "}{tr("of")}{" "}{formatNumber(active.length)}{" "}{tr("plans")}</span>
           </div>
 
           {compareIds.length > 0 && (
             <section
               className="rounded-lg border border-edge bg-surface/50 p-3"
-              aria-label="Plan comparison"
+              aria-label={tr("Plan comparison")}
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm text-muted" role="status">
-                  {compareIds.length} of {COMPARE_LIMIT} plans selected for comparison
-                  {compareIds.length === COMPARE_LIMIT ? " (maximum)" : ""}.
+                  {formatNumber(compareIds.length)}{" "}{tr("of")}{" "}{COMPARE_LIMIT}{" "}{tr("plans selected for comparison")}{compareIds.length === COMPARE_LIMIT ?tr(" (maximum)") : ""}.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -470,17 +421,13 @@ function SubscribeInner() {
                     aria-controls="plan-comparison"
                     onClick={() => setShowComparison((open) => !open)}
                   >
-                    {showComparison ? "Hide comparison" : "Compare plans"}
+                    {showComparison ?tr("Hide comparison") :tr("Compare plans")}
                   </button>
-                  <button type="button" className="btn-ghost" onClick={clearComparison}>
-                    Clear selection
-                  </button>
+                  <button type="button" className="btn-ghost" onClick={clearComparison}>{tr("Clear selection")}</button>
                 </div>
               </div>
               {comparedPlans.length < 2 && (
-                <p className="mt-2 text-xs text-muted">
-                  Select at least two plans to compare them side by side.
-                </p>
+                <p className="mt-2 text-xs text-muted">{tr("Select at least two plans to compare them side by side.")}</p>
               )}
               {showComparison && comparedPlans.length >= 2 && (
                 <div id="plan-comparison">
@@ -492,19 +439,15 @@ function SubscribeInner() {
 
           {filteredPlans.length === 0 ? (
             <Empty
-              title="No plans match this filter"
+              title={tr("No plans match this filter")}
               action={
                 <button
                   type="button"
                   className="btn-ghost"
                   onClick={() => updateParams("newest", "all")}
-                >
-                  Reset filters
-                </button>
+                >{tr("Reset filters")}</button>
               }
-            >
-              No active subscription plans match the selected billing period.
-            </Empty>
+            >{tr("No active subscription plans match the selected billing period.")}</Empty>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
               {filteredPlans.map((plan) => {
@@ -513,15 +456,15 @@ function SubscribeInner() {
                 const availability = planAvailability(plan, now);
                 const usdEstimate =
                   meta.symbol === "XLM" && xlmPrice
-                    ? formatUsdEstimate(plan.amount, xlmPrice.price, xlmPrice.decimals, meta.decimals)
+                    ? formatUsdString(formatUsdEstimate(plan.amount, xlmPrice.price, xlmPrice.decimals, meta.decimals))
                     : meta.symbol === "USDC"
-                      ? formatUsdcEstimate(plan.amount, meta.decimals)
+                      ? formatUsdString(formatUsdcEstimate(plan.amount, meta.decimals))
                       : null;
                 const selectedForCompare = compareIds.includes(plan.id);
                 return (
                   <Panel
                     key={plan.id}
-                    title={plan.name || `Plan #${plan.id}`}
+                    title={plan.name ||tr("Plan #{0}", { "0": plan.id })}
                     actions={
                       <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg px-1 py-1 text-sm text-muted">
                         <input
@@ -530,24 +473,22 @@ function SubscribeInner() {
                           checked={selectedForCompare}
                           disabled={!selectedForCompare && compareIds.length >= COMPARE_LIMIT}
                           onChange={() => toggleCompare(plan.id)}
-                          aria-label={`Compare ${plan.name || `Plan #${plan.id}`}`}
-                        />
-                        Compare
-                      </label>
+                          aria-label={tr("Compare {0}", { "0": plan.name ||tr("Plan #{0}", { "0": plan.id }) })}
+                        />{tr("Compare")}</label>
                     }
                   >
                     <div className="space-y-3">
                       <div>
                         <div className="flex flex-wrap items-baseline gap-2">
                           <div className="text-2xl font-semibold tabular-nums">
-                            {fromStroops(plan.amount, 4, meta.decimals)}{" "}
+                            {formatTokenValue(plan.amount, 4, meta.decimals)}{" "}
                             <span className="text-sm font-normal text-muted">{meta.symbol}</span>
                           </div>
                           {usdEstimate && (
                             <span
                               className="text-sm text-muted tabular-nums"
-                              title="Estimated USD value based on Reflector oracle price"
-                              aria-label={`Approximately ${usdEstimate} US Dollars`}
+                              title={tr("Estimated USD value based on Reflector oracle price")}
+                              aria-label={tr("Approximately {0} US Dollars", { "0": usdEstimate })}
                             >
                               (≈ {usdEstimate})
                             </span>
@@ -562,16 +503,12 @@ function SubscribeInner() {
                           )}
                         </div>
                         {badge && (
-                          <p className="mt-1 text-xs text-muted">
-                            Nothing is charged for {formatTrialLength(trialSeconds(plan))}. You can
-                            cancel any time before the first charge and pay nothing.
-                          </p>
+                          <p className="mt-1 text-xs text-muted">{tr("Nothing is charged for")}{" "}{formatTrialLength(trialSeconds(plan))}{tr(". You can cancel any time before the first charge and pay nothing.")}</p>
                         )}
                       </div>
 
                       {availability.until !== null && (
-                        <p className="text-sm text-muted">
-                          Available until{" "}
+                        <p className="text-sm text-muted">{tr("Available until")}{" "}
                           <time dateTime={new Date(availability.until * 1000).toISOString()}>
                             {formatDate(availability.until)} ({formatWhen(availability.until, now * 1000)})
                           </time>
@@ -579,30 +516,24 @@ function SubscribeInner() {
                       )}
                       {availability.seats !== null && (
                         <p className="text-sm text-accent">
-                          {availability.seats} {availability.seats === 1 ? "seat" : "seats"} left
-                        </p>
+                          {formatNumber(availability.seats)} {availability.seats === 1 ?tr("seat") :tr("seats")}{" "}{tr("left")}</p>
                       )}
                       {availability.countUnavailable && (
-                        <p className="text-sm text-muted">
-                          Remaining seats are unavailable from this source. Availability is checked by the
-                          contract when subscribing.
-                        </p>
+                        <p className="text-sm text-muted">{tr("Remaining seats are unavailable from this source. Availability is checked by the contract when subscribing.")}</p>
                       )}
                       {availability.reason && (
                         <p id={`availability-${plan.id}`} className="text-sm text-muted">
-                          {availability.reason}
+                          {translateMessage(availability.reason ?? "")}
                         </p>
                       )}
 
                       <div className="flex items-center justify-between gap-2 text-sm">
-                        <span className="text-muted">Merchant</span>
+                        <span className="text-muted">{tr("Merchant")}</span>
                         <MerchantAccount value={plan.merchant} />
                       </div>
 
                       <div>
-                        <label className="label" htmlFor={`limit-${plan.id}`}>
-                          Charge limit (0 = open-ended)
-                        </label>
+                        <label className="label" htmlFor={`limit-${plan.id}`}>{tr("Charge limit (0 = open-ended)")}</label>
                         <input
                           id={`limit-${plan.id}`}
                           className="input"
@@ -628,12 +559,12 @@ function SubscribeInner() {
                         }}
                       >
                         {busy === plan.id
-                          ? "Confirming…"
+                          ?tr("Confirming…")
                           : networkMismatch
-                          ? "Wrong network"
+                          ?tr("Wrong network")
                           : address
-                          ? "Subscribe"
-                          : "Connect wallet"}
+                          ?tr("Subscribe")
+                          :tr("Connect wallet")}
                       </button>
                     </div>
                   </Panel>
@@ -648,8 +579,9 @@ function SubscribeInner() {
 }
 
 export default function SubscribePage() {
+  const { t: tr } = useI18n();
   return (
-    <Suspense fallback={<SkeletonPlanCards label="Loading plans" />}>
+    <Suspense fallback={<SkeletonPlanCards label={tr("Loading plans")} />}>
       <SubscribeInner />
     </Suspense>
   );

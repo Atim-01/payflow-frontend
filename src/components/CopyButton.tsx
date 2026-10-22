@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/i18n/provider";
+
 import { useEffect, useRef, useState } from "react";
 import { copyToClipboard } from "@/lib/clipboard";
 
@@ -46,6 +48,7 @@ function CheckIcon() {
  * click worked.
  */
 export function CopyButton({ value, label }: { value: string; label: string }) {
+  const { t: tr } = useI18n();
   const [state, setState] = useState<CopyState>("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -65,9 +68,9 @@ export function CopyButton({ value, label }: { value: string; label: string }) {
 
   const announcement =
     state === "copied"
-      ? `${label} copied to clipboard`
+      ? tr("{0} copied to clipboard", { 0: label })
       : state === "error"
-        ? `Could not copy the ${label}`
+        ? tr("Could not copy the {0}", { 0: label })
         : "";
 
   return (
@@ -76,8 +79,8 @@ export function CopyButton({ value, label }: { value: string; label: string }) {
         type="button"
         onClick={() => void handleCopy()}
         className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted transition hover:bg-fg/10 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        aria-label={state === "copied" ? `${label} copied` : `Copy ${label}`}
-        title={`Copy ${label}`}
+        aria-label={state === "copied" ?tr("{0} copied", { "0": label }) :tr("Copy {0}", { "0": label })}
+        title={tr("Copy {0}", { "0": label })}
       >
         {state === "copied" ? <CheckIcon /> : <CopyIcon />}
       </button>

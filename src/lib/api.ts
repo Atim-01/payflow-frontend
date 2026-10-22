@@ -104,6 +104,30 @@ export interface ApiCharge {
   ledger: number;
 }
 
+/**
+ * A charge attempt that failed, proposed by payflow-backend#144.
+ *
+ * The backend records every attempt to settle a charge, including failures.
+ * This lets merchants understand why charges are failing and diagnose
+ * subscriber issues (insufficient balance, paused mandate, etc.).
+ */
+export interface ApiChargeAttempt {
+  /** Unique identifier for this attempt. */
+  id: number;
+  /** The mandate the charge was attempted against. */
+  mandate_id: number;
+  /** Unix timestamp when the charge was attempted. */
+  attempted_at: number;
+  /** Result: "success" or "failed". */
+  result: "success" | "failed";
+  /** Contract error code if the attempt failed, null otherwise. */
+  error_code: number | null;
+  /** Plain-language error message if the attempt failed, null otherwise. */
+  error_message: string | null;
+  /** Transaction hash if the charge succeeded, null otherwise. */
+  tx_hash: string | null;
+}
+
 export interface ApiWebhook {
   id: string;
   url: string;
@@ -425,6 +449,17 @@ export const api = {
    */
   recentCharges: (limit = 10) =>
     get<{ charges: RecentCharge[] }>(`/api/recent?limit=${limit}`),
+  /**
+   * Charge attempts for a mandate, proposed by payflow-backend#144.
+   *
+   * Returns null when the backend is unreachable or does not yet serve this
+   * endpoint. Contract-only mode cannot reconstruct attempt history — only
+   * successful charges are recorded on-chain.
+   */
+  chargeAttempts: (mandateId: number) =>
+    get<{ attempts: ApiChargeAttempt[] }>(`/api/mandates/${mandateId}/attempts`).then(
+      (body) => body?.attempts ?? null,
+    ),
 
   /**
    * Unpaid subscribers for a merchant, proposed by payflow-backend#146.

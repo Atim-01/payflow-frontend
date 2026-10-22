@@ -104,7 +104,7 @@ export type AmountCheck =
  * `decimals` matches `toStroops`: a SEP-41 token picks its own scale, so a
  * 6-decimal token must be refused at the 7th place, not the 6th.
  */
-export function checkAmount(input: string, decimals = DECIMALS): AmountCheck {
+export function checkAmount(input: string, decimals = DECIMALS, locale?: string): AmountCheck {
   const places = normalizeDecimals(decimals);
   const trimmed = input.trim();
   if (trimmed === "") {
@@ -114,7 +114,7 @@ export function checkAmount(input: string, decimals = DECIMALS): AmountCheck {
   // then apply the strict dot-decimal rules below to the canonical form.
   // A trailing mark ("1.") canonicalises unchanged, so an unfinished entry
   // still passes exactly as it did before locale parsing existed.
-  const canonical = canonicalAmount(trimmed);
+  const canonical = canonicalAmount(trimmed, locale);
   if (canonical === null || !/^\d+(\.\d*)?$/.test(canonical)) {
     return { ok: false, message: "Enter a positive number, for example 2.5." };
   }
@@ -287,9 +287,20 @@ export function formatExactTime(unixSeconds: number): string {
  * numbers — the same disambiguation spreadsheet and banking software use.
  * Earlier separators must then be valid grouping ("1.2.3" is rejected).
  */
-export function canonicalAmount(input: string): string | null {
+export function canonicalAmount(input: string, locale?: string): string | null {
   const stripped = input.replace(/[\s\u00a0\u202f]/g, "");
   if (!stripped || !/^[\d.,]+$/.test(stripped)) return null;
+  // French commas are decimal marks even when exactly three digits follow.
+  // Dot-decimal keyboard input remains supported; grouping is unambiguous with spaces.
+  if (locale?.toLowerCase().startsWith("fr")) {
+    if (/^\d*(?:[.,]\d*)?$/.test(stripped) && /\d/.test(stripped)) return stripped.replace(",", ".");
+    if (/^\d{1,3}(?:\.\d{3})+,\d*$/.test(stripped)) return stripped.replace(/\./g, "").replace(",", ".");
+    return null;
+  }
+
+  // With an explicit English locale a dot is always decimal, including 1.234.
+  // Preserve historical separator inference for callers without a locale.
+  if (locale?.toLowerCase().startsWith("en") && /^\d+(?:\.\d*)?$/.test(stripped)) return stripped;
 
   // "1,234" / "1.234.567": every separator groups thousands, none is decimal.
   if (/^\d{1,3}([.,]\d{3})+$/.test(stripped)) {
@@ -313,8 +324,8 @@ export function canonicalAmount(input: string): string | null {
  * "1.234,5" and "1,234.5" both convert to the same bigint. Amounts must stay
  * bigint end to end — no step here touches `Number`.
  */
-export function parseAmount(input: string, decimals = DECIMALS): bigint {
-  const canonical = canonicalAmount(input);
+export function parseAmount(input: string, decimals = DECIMALS, locale?: string): bigint {
+  const canonical = canonicalAmount(input, locale);
   if (canonical === null) {
     throw new Error("Enter a positive number, for example 2.5");
   }
@@ -346,14 +357,14 @@ export function normaliseAmountInput(raw: string): string {
  * Why an amount field cannot be submitted, or `null` when it can — including
  * when it is empty or the user is mid-keystroke on a trailing separator.
  */
-export function amountError(input: string, decimals = DECIMALS): string | null {
+export function amountError(input: string, decimals = DECIMALS, locale?: string): string | null {
   const stripped = input.replace(/[\s\u00a0\u202f]/g, "");
   if (!stripped) return null;
   // A bare trailing separator ("12.", ",") is someone still typing, not a
   // mistake yet; anything else must parse cleanly before the form submits.
   if (/^\d+[.,]$|^[.,]$/.test(stripped)) return null;
   try {
-    parseAmount(stripped, decimals);
+    parseAmount(stripped, decimals, locale);
     return null;
   } catch (err) {
     return err instanceof Error ? err.message : String(err);

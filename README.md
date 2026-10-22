@@ -64,6 +64,30 @@ Stellar Wallets Kit supports) set to **Testnet**.
 To see plans and history, run [payflow-backend](https://github.com/MMM-pay/payflow-backend)
 alongside it on port 8080.
 
+## Wallet support
+
+The lazy browser-only kit retains its built-in Freighter, xBull, Albedo, Lobstr,
+Hana, Rabet, HOT and Klever modules. Wallet availability depends on the user's
+installed extension or the wallet's web/mobile support.
+
+WalletConnect is optional: set `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` to your
+public Reown project ID, allowlist the deployed origin in that project, and
+rebuild. Metadata uses the current origin plus `NEXT_PUBLIC_BASE_PATH`, so the
+GitHub Pages deployment under `/payflow-frontend` is supported. It requests
+`stellar_signXDR` only; Payflow submits through its existing RPC path. A blank
+project ID or a custom network outside Testnet/Public omits the bridge while
+leaving default wallets available. No backend is required.
+
+Automated mocked connection/signing checks cover **xBull, Albedo, Lobstr and
+Hana**, plus registration, optional-bridge configuration, sign-only permissions,
+and static-site metadata. These verify application delegation, not real wallet
+signatures. **Live Testnet signing with three wallets remains a manual release
+check; no live wallet run is claimed here.** Use funded Testnet accounts, connect
+and sign a known test transaction with each wallet, and record wallet/version,
+network and transaction evidence before release. Never use a real-value wallet
+for this unaudited demo. Existing network/account-change and signature-error
+checks remain in the shared WalletProvider.
+
 ## Environment
 
 Every variable is `NEXT_PUBLIC_*` and therefore **inlined at build time**.
@@ -79,6 +103,7 @@ reason a deployed frontend keeps calling `localhost`.
 | `NEXT_PUBLIC_SUBSCRIPTION_ID` | Deployed subscription contract |
 | `NEXT_PUBLIC_TOKEN_ID` | SEP-41 token used for plans (native XLM SAC by default) |
 | `NEXT_PUBLIC_API_URL` | payflow-backend base URL. Empty means read contract state directly |
+| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Optional public Reown project ID; empty disables WalletConnect |
 | `NEXT_PUBLIC_READ_SOURCE` | Any existing account, used as the source for read-only simulations before a wallet connects |
 
 ## Deploying to Vercel
