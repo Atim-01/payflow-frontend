@@ -41,7 +41,6 @@ const apiMock = vi.hoisted(() => ({
   merchantCohortRetention: vi.fn(),
   planStats: vi.fn(),
   webhooks: vi.fn(),
-  merchantCohortRetention: vi.fn(),
 }));
 
 const chainMock = vi.hoisted(() => ({
