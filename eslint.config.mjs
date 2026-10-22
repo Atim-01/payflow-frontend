@@ -1,8 +1,8 @@
 import { globalIgnores } from "eslint/config";
 // eslint-config-next 16 ships flat configs directly; the FlatCompat/eslintrc
 // bridge used on Next 15 is gone.
-import coreWebVitals from "eslint-config-next/core-web-vitals.js";
-import typescript from "eslint-config-next/typescript.js";
+import coreWebVitals from "eslint-config-next/core-web-vitals";
+import typescript from "eslint-config-next/typescript";
 
 const config = [
   globalIgnores([".next/**", "out/**", "node_modules/**", "next-env.d.ts"]),
