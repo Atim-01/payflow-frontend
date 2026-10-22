@@ -38,6 +38,7 @@ const apiMock = vi.hoisted(() => ({
   merchantSummary: vi.fn(),
   merchantRevenue: vi.fn(),
   merchantChurn: vi.fn(),
+  merchantCohortRetention: vi.fn(),
 }));
 
 const chainMock = vi.hoisted(() => ({
@@ -130,6 +131,7 @@ beforeEach(() => {
   apiMock.merchantSummary.mockReset().mockResolvedValue(null);
   apiMock.merchantRevenue.mockReset().mockResolvedValue(null);
   apiMock.merchantChurn.mockReset().mockResolvedValue(null);
+  apiMock.merchantCohortRetention.mockReset().mockResolvedValue(null);
   chainMock.chainPlans.mockReset().mockResolvedValue([]);
   chainMock.chainPlansOf.mockReset().mockResolvedValue([]);
   chainMock.chainMandatesOf.mockReset().mockResolvedValue([]);
