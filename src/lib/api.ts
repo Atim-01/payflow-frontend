@@ -438,6 +438,19 @@ export const api = {
     get<{ unpaid: ApiMandate[] }>(`/api/merchants/${merchant}/unpaid`),
 
   /**
+   * Cohort retention analysis by signup month, proposed by payflow-backend#142.
+   *
+   * Returns a grid showing what percentage of each month's signups remained
+   * subscribed in subsequent months. The endpoint is optional until deployed.
+   * An empty API URL must not turn this into a same-origin request or a
+   * contract-only approximation.
+   */
+  merchantCohortRetention: (address: string) => {
+    if (!api.isConfigured()) return Promise.resolve(null);
+    return get<unknown>(`/api/merchants/${address}/cohort-retention?bucket=month`);
+  },
+
+  /**
    * Open an SSE stream for live updates scoped to the given address.
    *
    * The backend must be configured (NEXT_PUBLIC_API_URL set) and the deployed

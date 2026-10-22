@@ -29,6 +29,7 @@ const apiMock = vi.hoisted(() => ({
   merchantSummary: vi.fn(),
   merchantRevenue: vi.fn(),
   merchantChurn: vi.fn(),
+  merchantCohortRetention: vi.fn(),
   planStats: vi.fn(),
   stream: vi.fn(),
   webhooks: vi.fn(),
@@ -80,6 +81,7 @@ beforeEach(() => {
   apiMock.merchantSummary.mockResolvedValue(null);
   apiMock.merchantRevenue.mockResolvedValue(null);
   apiMock.merchantChurn.mockResolvedValue(null);
+  apiMock.merchantCohortRetention.mockResolvedValue(null);
   apiMock.planStats.mockResolvedValue(null);
   apiMock.webhooks.mockResolvedValue([]);
   chainMock.chainPlanSubscriberCount.mockResolvedValue(null);

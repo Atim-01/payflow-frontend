@@ -29,6 +29,7 @@ const apiMock = vi.hoisted(() => ({
   merchantSummary: vi.fn(),
   merchantRevenue: vi.fn(async () => ({ points: [] })),
   merchantChurn: vi.fn(async () => ({ months: [] })),
+  merchantCohortRetention: vi.fn(async () => null),
   planStats: vi.fn(),
   stream: vi.fn(() => null),
   webhooks: vi.fn(async () => []),
@@ -118,6 +119,7 @@ describe("Multi-token plans & trustline prompt (#31)", () => {
     apiMock.planStats.mockResolvedValue({});
     apiMock.merchantRevenue.mockResolvedValue({ points: [] });
     apiMock.merchantChurn.mockResolvedValue({ months: [] });
+    apiMock.merchantCohortRetention.mockResolvedValue(null);
     payflowMock.createPlan.mockReset();
     payflowMock.checkTrustline.mockReset();
     payflowMock.addTrustline.mockReset();
