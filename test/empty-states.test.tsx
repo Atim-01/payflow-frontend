@@ -41,6 +41,7 @@ const apiMock = vi.hoisted(() => ({
   merchantCohortRetention: vi.fn(),
   planStats: vi.fn(),
   webhooks: vi.fn(),
+  merchantCohortRetention: vi.fn(),
 }));
 
 const chainMock = vi.hoisted(() => ({
@@ -136,6 +137,7 @@ beforeEach(() => {
   apiMock.merchantCohortRetention.mockReset().mockResolvedValue(null);
   apiMock.planStats.mockReset().mockResolvedValue(null);
   apiMock.webhooks.mockReset().mockResolvedValue([]);
+  apiMock.merchantCohortRetention.mockReset().mockResolvedValue(null);
   chainMock.chainPlans.mockReset().mockResolvedValue([]);
   chainMock.chainPlansOf.mockReset().mockResolvedValue([]);
   chainMock.chainMandatesOf.mockReset().mockResolvedValue([]);
