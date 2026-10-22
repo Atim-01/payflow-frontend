@@ -24,6 +24,7 @@ vi.mock("@/lib/api", async original => {
     mandatesOf: async () => ({ mandates: [] }), mandatesFor: async () => ({ mandates: [] }),
     vaultHistory: async () => null, merchantSummary: async () => null,
     merchantRevenue: async () => null, merchantChurn: async () => null,
+    merchantCohortRetention: async () => null,
     webhooks: async () => [], planStats: async () => null, stream: () => null,
   } };
 });
