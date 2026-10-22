@@ -52,22 +52,18 @@ export function CohortRetentionTable({ merchant, apiConfigured }: CohortRetentio
     };
   }, [apiConfigured, merchant]);
 
-  if (!apiConfigured) {
-    return (
-      <Notice tone="info">
-        Cohort retention analysis requires the payflow backend. Configure NEXT_PUBLIC_API_URL
-        to enable this report; contract-only mode does not retain historical signup and churn
-        data needed for cohort tracking.
-      </Notice>
-    );
-  }
-
   return (
     <Panel
       title="Cohort retention"
       subtitle="Percentage of each signup month's subscribers still active in subsequent months. Higher percentages indicate better retention."
     >
-      {state.status === "loading" ? (
+      {!apiConfigured ? (
+        <Notice tone="info">
+          Cohort retention analysis requires the payflow backend. Configure NEXT_PUBLIC_API_URL
+          to enable this report; contract-only mode does not retain historical signup and churn
+          data needed for cohort tracking.
+        </Notice>
+      ) : state.status === "loading" ? (
         <SkeletonRows rows={3} label="Loading cohort retention data" />
       ) : state.status === "unavailable" ? (
         <Empty title="Cohort retention analysis unavailable">
